@@ -2,6 +2,8 @@
 
 This project uses syskit for specification-driven development.
 
+**New to syskit?** Run `/syskit-guide` for an interactive walkthrough.
+
 ## Document Locations
 
 All persistent engineering documents live under `doc/`:

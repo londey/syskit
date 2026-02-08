@@ -19,9 +19,6 @@ if [ ! -d ".git" ] && [ "$1" != "--force" ]; then
     exit 1
 fi
 
-PROJECT_NAME=$(basename "$(pwd)")
-DATE=$(date -Iseconds)
-
 info "Installing syskit in: $(pwd)"
 
 # Create directory structure
@@ -29,7 +26,6 @@ info "Creating directories..."
 mkdir -p doc/requirements
 mkdir -p doc/interfaces
 mkdir -p doc/design
-mkdir -p .syskit/commands
 mkdir -p .syskit/scripts
 mkdir -p .syskit/analysis
 mkdir -p .syskit/tasks
@@ -38,10 +34,12 @@ mkdir -p .claude/commands
 
 # --- .syskit/AGENTS.md ---
 info "Creating .syskit/AGENTS.md"
-cat > ".syskit/AGENTS.md" << 'SYSKIT_EOF'
+cat > ".syskit/AGENTS.md" << '__SYSKIT_TEMPLATE_END__'
 # syskit — AI Assistant Instructions
 
 This project uses syskit for specification-driven development.
+
+**New to syskit?** Run `/syskit-guide` for an interactive walkthrough.
 
 ## Document Locations
 
@@ -169,11 +167,11 @@ Use consistent identifiers when referencing between documents:
 - `UNIT-012` — Design unit 012
 
 These identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 
 # --- .syskit/scripts/manifest.sh ---
 info "Creating .syskit/scripts/manifest.sh"
-cat > ".syskit/scripts/manifest.sh" << 'SYSKIT_EOF'
+cat > ".syskit/scripts/manifest.sh" << '__SYSKIT_TEMPLATE_END__'
 #!/bin/bash
 # Generate manifest of all specification documents with SHA256 hashes
 set -e
@@ -249,12 +247,12 @@ hash_directory "doc/interfaces" "Interfaces"
 hash_directory "doc/design" "Design"
 
 echo "Manifest updated: $MANIFEST"
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/manifest.sh"
 
 # --- .syskit/scripts/new-int.sh ---
 info "Creating .syskit/scripts/new-int.sh"
-cat > ".syskit/scripts/new-int.sh" << 'SYSKIT_EOF'
+cat > ".syskit/scripts/new-int.sh" << '__SYSKIT_TEMPLATE_END__'
 #!/bin/bash
 # Create a new interface document
 set -e
@@ -344,12 +342,12 @@ EOF
 
 echo "Created: $FILEPATH"
 echo "ID: $ID"
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/new-int.sh"
 
 # --- .syskit/scripts/new-req.sh ---
 info "Creating .syskit/scripts/new-req.sh"
-cat > ".syskit/scripts/new-req.sh" << 'SYSKIT_EOF'
+cat > ".syskit/scripts/new-req.sh" << '__SYSKIT_TEMPLATE_END__'
 #!/bin/bash
 # Create a new requirement document
 set -e
@@ -433,12 +431,12 @@ EOF
 
 echo "Created: $FILEPATH"
 echo "ID: $ID"
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/new-req.sh"
 
 # --- .syskit/scripts/new-unit.sh ---
 info "Creating .syskit/scripts/new-unit.sh"
-cat > ".syskit/scripts/new-unit.sh" << 'SYSKIT_EOF'
+cat > ".syskit/scripts/new-unit.sh" << '__SYSKIT_TEMPLATE_END__'
 #!/bin/bash
 # Create a new design unit document
 set -e
@@ -542,12 +540,12 @@ EOF
 
 echo "Created: $FILEPATH"
 echo "ID: $ID"
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/new-unit.sh"
 
 # --- .claude/commands/syskit-guide.md ---
 info "Creating .claude/commands/syskit-guide.md"
-cat > ".claude/commands/syskit-guide.md" << 'SYSKIT_EOF'
+cat > ".claude/commands/syskit-guide.md" << '__SYSKIT_TEMPLATE_END__'
 ---
 description: Interactive guide for getting started with syskit
 arguments:
@@ -718,11 +716,11 @@ Ask the user what they'd like to do:
 - Create a new requirement, interface, or design unit to get hands-on practice
 - Run `/syskit-impact` on a change they have in mind
 - Ask questions about the existing specifications
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 
 # --- .claude/commands/syskit-impact.md ---
 info "Creating .claude/commands/syskit-impact.md"
-cat > ".claude/commands/syskit-impact.md" << 'SYSKIT_EOF'
+cat > ".claude/commands/syskit-impact.md" << '__SYSKIT_TEMPLATE_END__'
 ---
 description: Analyze impact of a proposed change across all specifications
 arguments:
@@ -832,11 +830,11 @@ Status: Pending Review
 After presenting the impact report, ask:
 
 "Shall I proceed with proposing specific modifications to the affected documents?"
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 
 # --- .claude/commands/syskit-implement.md ---
 info "Creating .claude/commands/syskit-implement.md"
-cat > ".claude/commands/syskit-implement.md" << 'SYSKIT_EOF'
+cat > ".claude/commands/syskit-implement.md" << '__SYSKIT_TEMPLATE_END__'
 ---
 description: Execute implementation tasks from the current plan
 arguments:
@@ -935,11 +933,11 @@ After completing the task:
 3. If no, report: "All tasks complete. Run `.syskit/scripts/manifest.sh` to update the manifest."
 
 Also remind to update any design documents if implementation details changed.
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 
 # --- .claude/commands/syskit-plan.md ---
 info "Creating .claude/commands/syskit-plan.md"
-cat > ".claude/commands/syskit-plan.md" << 'SYSKIT_EOF'
+cat > ".claude/commands/syskit-plan.md" << '__SYSKIT_TEMPLATE_END__'
 ---
 description: Create implementation task breakdown from approved specification changes
 arguments:
@@ -1080,11 +1078,11 @@ Ready to begin implementation?
 - 'start <n>' to begin with a specific task
 - 'review <n>' to discuss a specific task
 - 'revise' to modify the plan"
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 
 # --- .claude/commands/syskit-propose.md ---
 info "Creating .claude/commands/syskit-propose.md"
-cat > ".claude/commands/syskit-propose.md" << 'SYSKIT_EOF'
+cat > ".claude/commands/syskit-propose.md" << '__SYSKIT_TEMPLATE_END__'
 ---
 description: Propose specific modifications to specifications based on impact analysis
 arguments:
@@ -1197,12 +1195,12 @@ Present a summary of all proposed changes and ask:
 - 'approve <filename>' to apply changes to a specific file
 - 'revise <filename>' to discuss modifications
 - 'reject' to discard this proposal"
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 
 # --- doc/requirements/quality_metrics.md ---
 if [ ! -f "doc/requirements/quality_metrics.md" ]; then
 info "Creating doc/requirements/quality_metrics.md"
-cat > "doc/requirements/quality_metrics.md" << 'SYSKIT_EOF'
+cat > "doc/requirements/quality_metrics.md" << '__SYSKIT_TEMPLATE_END__'
 # Quality Metrics
 
 This document defines the quality attributes and metrics for the system.
@@ -1276,7 +1274,7 @@ This document defines the quality attributes and metrics for the system.
 
 - **Target:** 100% of SHALL requirements
 - **Measurement:** Traceability analysis
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 else
     info "Skipping doc/requirements/quality_metrics.md (already exists)"
 fi
@@ -1284,7 +1282,7 @@ fi
 # --- doc/requirements/req_000_template.md ---
 if [ ! -f "doc/requirements/req_000_template.md" ]; then
 info "Creating doc/requirements/req_000_template.md"
-cat > "doc/requirements/req_000_template.md" << 'SYSKIT_EOF'
+cat > "doc/requirements/req_000_template.md" << '__SYSKIT_TEMPLATE_END__'
 # REQ-000: Template
 
 This is a template file. Create new requirements using:
@@ -1341,7 +1339,7 @@ Use:
 ## Notes
 
 <Additional context, open questions, or references>
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 else
     info "Skipping doc/requirements/req_000_template.md (already exists)"
 fi
@@ -1349,7 +1347,7 @@ fi
 # --- doc/requirements/states_and_modes.md ---
 if [ ! -f "doc/requirements/states_and_modes.md" ]; then
 info "Creating doc/requirements/states_and_modes.md"
-cat > "doc/requirements/states_and_modes.md" << 'SYSKIT_EOF'
+cat > "doc/requirements/states_and_modes.md" << '__SYSKIT_TEMPLATE_END__'
 # States and Modes
 
 This document defines the operational states and modes of the system.
@@ -1405,7 +1403,7 @@ This document defines the operational states and modes of the system.
 |------|---------|---------|---------|
 | Mode 1 | ✓ | ✓ | ✗ |
 | Mode 2 | ✓ | ✗ | ✓ |
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 else
     info "Skipping doc/requirements/states_and_modes.md (already exists)"
 fi
@@ -1413,7 +1411,7 @@ fi
 # --- doc/interfaces/int_000_template.md ---
 if [ ! -f "doc/interfaces/int_000_template.md" ]; then
 info "Creating doc/interfaces/int_000_template.md"
-cat > "doc/interfaces/int_000_template.md" << 'SYSKIT_EOF'
+cat > "doc/interfaces/int_000_template.md" << '__SYSKIT_TEMPLATE_END__'
 # INT-000: Template
 
 This is a template file. Create new interfaces using:
@@ -1489,7 +1487,7 @@ For APIs, consider:
 ## Notes
 
 <Additional context, rationale for choices, compatibility considerations>
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 else
     info "Skipping doc/interfaces/int_000_template.md (already exists)"
 fi
@@ -1497,7 +1495,7 @@ fi
 # --- doc/design/concept_of_execution.md ---
 if [ ! -f "doc/design/concept_of_execution.md" ]; then
 info "Creating doc/design/concept_of_execution.md"
-cat > "doc/design/concept_of_execution.md" << 'SYSKIT_EOF'
+cat > "doc/design/concept_of_execution.md" << '__SYSKIT_TEMPLATE_END__'
 # Concept of Execution
 
 This document describes the runtime behavior of the system: how it starts up, how data flows through it, and how it responds to events.
@@ -1553,7 +1551,7 @@ Consider using a diagram:
 ## Resource Management
 
 <How resources (memory, buffers, connections) are managed>
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 else
     info "Skipping doc/design/concept_of_execution.md (already exists)"
 fi
@@ -1561,7 +1559,7 @@ fi
 # --- doc/design/design_decisions.md ---
 if [ ! -f "doc/design/design_decisions.md" ]; then
 info "Creating doc/design/design_decisions.md"
-cat > "doc/design/design_decisions.md" << 'SYSKIT_EOF'
+cat > "doc/design/design_decisions.md" << '__SYSKIT_TEMPLATE_END__'
 # Design Decisions
 
 This document records significant design decisions using a lightweight Architecture Decision Record (ADR) format.
@@ -1598,7 +1596,7 @@ When adding a new decision, copy this template:
 ## Decisions
 
 <!-- Add decisions below, newest first -->
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 else
     info "Skipping doc/design/design_decisions.md (already exists)"
 fi
@@ -1606,7 +1604,7 @@ fi
 # --- doc/design/unit_000_template.md ---
 if [ ! -f "doc/design/unit_000_template.md" ]; then
 info "Creating doc/design/unit_000_template.md"
-cat > "doc/design/unit_000_template.md" << 'SYSKIT_EOF'
+cat > "doc/design/unit_000_template.md" << '__SYSKIT_TEMPLATE_END__'
 # UNIT-000: Template
 
 This is a template file. Create new design units using:
@@ -1697,7 +1695,7 @@ Consider documenting:
 - Resource usage (for FPGA: LUTs, registers, BRAM)
 - Known limitations
 - Future improvement ideas
-SYSKIT_EOF
+__SYSKIT_TEMPLATE_END__
 else
     info "Skipping doc/design/unit_000_template.md (already exists)"
 fi
@@ -1710,11 +1708,24 @@ info "Generating manifest..."
 if [ -f "CLAUDE.md" ]; then
     if ! grep -q "syskit" "CLAUDE.md"; then
         info "Adding syskit reference to CLAUDE.md"
-        echo "" >> CLAUDE.md
-        echo "## syskit" >> CLAUDE.md
-        echo "" >> CLAUDE.md
-        echo "This project uses syskit for specification-driven development." >> CLAUDE.md
-        echo "See \`.syskit/AGENTS.md\` for workflow instructions." >> CLAUDE.md
+        cat >> CLAUDE.md << 'CLAUDE_APPEND_EOF'
+
+## syskit
+
+This project uses syskit for specification-driven development.
+
+**Before any syskit workflow, read `.syskit/AGENTS.md` for full instructions.**
+
+Quick reference:
+- `/syskit-guide` — Interactive onboarding (start here if new)
+- `/syskit-impact <change>` — Analyze impact of a proposed change
+- `/syskit-propose` — Propose spec modifications based on impact analysis
+- `/syskit-plan` — Create implementation task breakdown
+- `/syskit-implement` — Execute planned tasks
+
+Specifications live in `doc/` (requirements, interfaces, design).
+Working documents live in `.syskit/` (analysis, tasks, manifest).
+CLAUDE_APPEND_EOF
     fi
 else
     info "Creating CLAUDE.md"
@@ -1724,7 +1735,18 @@ else
 ## syskit
 
 This project uses syskit for specification-driven development.
-See `.syskit/AGENTS.md` for workflow instructions.
+
+**Before any syskit workflow, read `.syskit/AGENTS.md` for full instructions.**
+
+Quick reference:
+- `/syskit-guide` — Interactive onboarding (start here if new)
+- `/syskit-impact <change>` — Analyze impact of a proposed change
+- `/syskit-propose` — Propose spec modifications based on impact analysis
+- `/syskit-plan` — Create implementation task breakdown
+- `/syskit-implement` — Execute planned tasks
+
+Specifications live in `doc/` (requirements, interfaces, design).
+Working documents live in `.syskit/` (analysis, tasks, manifest).
 CLAUDE_EOF
 fi
 
@@ -1732,9 +1754,6 @@ info ""
 info "syskit installed successfully!"
 info ""
 info "Next steps:"
-info "  1. Create requirements:  .syskit/scripts/new-req.sh <name>"
-info "  2. Create interfaces:    .syskit/scripts/new-int.sh <name>"
-info "  3. Create design units:  .syskit/scripts/new-unit.sh <name>"
-info "  4. Use /syskit-impact to analyze changes"
+info "  Run /syskit-guide for an interactive walkthrough"
 info ""
 info "See .syskit/AGENTS.md for full documentation."

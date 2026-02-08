@@ -44,7 +44,6 @@ for dir in \
     "doc/requirements" \
     "doc/interfaces" \
     "doc/design" \
-    ".syskit/commands" \
     ".syskit/scripts" \
     ".syskit/analysis" \
     ".syskit/tasks" \
@@ -72,6 +71,7 @@ for file in \
     ".claude/commands/syskit-propose.md" \
     ".claude/commands/syskit-plan.md" \
     ".claude/commands/syskit-implement.md" \
+    ".claude/commands/syskit-guide.md" \
     "doc/requirements/states_and_modes.md" \
     "doc/requirements/quality_metrics.md" \
     "doc/requirements/req_000_template.md" \
@@ -155,16 +155,18 @@ fi
 echo ""
 echo "Testing idempotent installation..."
 
+SYSKIT_COUNT_BEFORE=$(grep -c "syskit" CLAUDE.md || true)
+
 # Run installer again
 if bash "$INSTALLER" > /dev/null 2>&1; then
     pass "Second installation succeeded"
-    
+
     # Check we didn't duplicate content in CLAUDE.md
-    SYSKIT_COUNT=$(grep -c "syskit" CLAUDE.md || true)
-    if [ "$SYSKIT_COUNT" -le 3 ]; then
+    SYSKIT_COUNT_AFTER=$(grep -c "syskit" CLAUDE.md || true)
+    if [ "$SYSKIT_COUNT_AFTER" -eq "$SYSKIT_COUNT_BEFORE" ]; then
         pass "CLAUDE.md not duplicated"
     else
-        fail "CLAUDE.md has duplicate syskit references"
+        fail "CLAUDE.md has duplicate syskit references (before: $SYSKIT_COUNT_BEFORE, after: $SYSKIT_COUNT_AFTER)"
     fi
 else
     fail "Second installation failed"

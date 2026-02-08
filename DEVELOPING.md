@@ -15,7 +15,6 @@ syskit/
 │   │   └── design/
 │   ├── syskit/
 │   │   ├── AGENTS.md
-│   │   ├── commands/
 │   │   └── scripts/
 │   └── claude/
 │       └── commands/      # Claude Code slash commands
@@ -39,13 +38,6 @@ The `build/generate-installer.sh` script reads all files from `templates/` and g
 3. Test with `./test/test-install.sh`
 4. Commit both the templates and the generated `install.sh`
 
-## Template Variables
-
-Templates can contain variables that are substituted at install time:
-
-- `{{PROJECT_NAME}}` — Name of the target project (directory name)
-- `{{DATE}}` — Installation date (ISO format)
-
 ## Adding New Templates
 
 1. Create the file in the appropriate location under `templates/`
@@ -54,12 +46,9 @@ Templates can contain variables that are substituted at install time:
 
 ## Adding New Slash Commands
 
-Slash commands live in two places:
+Slash commands live in `templates/claude/commands/` and are installed to `.claude/commands/` in the target project.
 
-- `templates/syskit/commands/` — Commands referenced by AGENTS.md
-- `templates/claude/commands/` — Claude Code specific slash commands (`.claude/commands/`)
-
-For Claude Code, slash commands need a frontmatter block:
+Slash commands need a frontmatter block:
 
 ```markdown
 ---

@@ -31,9 +31,6 @@ if [ ! -d ".git" ] && [ "$1" != "--force" ]; then
     exit 1
 fi
 
-PROJECT_NAME=$(basename "$(pwd)")
-DATE=$(date -Iseconds)
-
 info "Installing syskit in: $(pwd)"
 
 # Create directory structure
@@ -41,7 +38,6 @@ info "Creating directories..."
 mkdir -p doc/requirements
 mkdir -p doc/interfaces
 mkdir -p doc/design
-mkdir -p .syskit/commands
 mkdir -p .syskit/scripts
 mkdir -p .syskit/analysis
 mkdir -p .syskit/tasks
@@ -64,12 +60,9 @@ embed_file() {
     fi
     
     echo "info \"Creating $dest\""
-    echo "cat > \"$dest\" << 'SYSKIT_EOF'"
-    
-    # Escape any existing SYSKIT_EOF in the file (unlikely but safe)
-    sed 's/SYSKIT_EOF/SYSKIT_EOF_ESCAPED/g' "$src"
-    
-    echo "SYSKIT_EOF"
+    echo "cat > \"$dest\" << '__SYSKIT_TEMPLATE_END__'"
+    cat "$src"
+    echo "__SYSKIT_TEMPLATE_END__"
     
     if [ "$mode" = "755" ]; then
         echo "chmod +x \"$dest\""
@@ -124,11 +117,24 @@ info "Generating manifest..."
 if [ -f "CLAUDE.md" ]; then
     if ! grep -q "syskit" "CLAUDE.md"; then
         info "Adding syskit reference to CLAUDE.md"
-        echo "" >> CLAUDE.md
-        echo "## syskit" >> CLAUDE.md
-        echo "" >> CLAUDE.md
-        echo "This project uses syskit for specification-driven development." >> CLAUDE.md
-        echo "See \`.syskit/AGENTS.md\` for workflow instructions." >> CLAUDE.md
+        cat >> CLAUDE.md << 'CLAUDE_APPEND_EOF'
+
+## syskit
+
+This project uses syskit for specification-driven development.
+
+**Before any syskit workflow, read `.syskit/AGENTS.md` for full instructions.**
+
+Quick reference:
+- `/syskit-guide` — Interactive onboarding (start here if new)
+- `/syskit-impact <change>` — Analyze impact of a proposed change
+- `/syskit-propose` — Propose spec modifications based on impact analysis
+- `/syskit-plan` — Create implementation task breakdown
+- `/syskit-implement` — Execute planned tasks
+
+Specifications live in `doc/` (requirements, interfaces, design).
+Working documents live in `.syskit/` (analysis, tasks, manifest).
+CLAUDE_APPEND_EOF
     fi
 else
     info "Creating CLAUDE.md"
@@ -138,7 +144,18 @@ else
 ## syskit
 
 This project uses syskit for specification-driven development.
-See `.syskit/AGENTS.md` for workflow instructions.
+
+**Before any syskit workflow, read `.syskit/AGENTS.md` for full instructions.**
+
+Quick reference:
+- `/syskit-guide` — Interactive onboarding (start here if new)
+- `/syskit-impact <change>` — Analyze impact of a proposed change
+- `/syskit-propose` — Propose spec modifications based on impact analysis
+- `/syskit-plan` — Create implementation task breakdown
+- `/syskit-implement` — Execute planned tasks
+
+Specifications live in `doc/` (requirements, interfaces, design).
+Working documents live in `.syskit/` (analysis, tasks, manifest).
 CLAUDE_EOF
 fi
 
@@ -146,10 +163,7 @@ info ""
 info "syskit installed successfully!"
 info ""
 info "Next steps:"
-info "  1. Create requirements:  .syskit/scripts/new-req.sh <name>"
-info "  2. Create interfaces:    .syskit/scripts/new-int.sh <name>"
-info "  3. Create design units:  .syskit/scripts/new-unit.sh <name>"
-info "  4. Use /syskit-impact to analyze changes"
+info "  Run /syskit-guide for an interactive walkthrough"
 info ""
 info "See .syskit/AGENTS.md for full documentation."
 SCRIPT_FOOTER

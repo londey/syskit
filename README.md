@@ -14,7 +14,7 @@ syskit installs as a set of files in your repository—no runtime, no server, no
 ## Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOU/syskit/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/londey/syskit/refs/heads/master/install.sh | bash
 ```
 
 Or download `install.sh` and run it in your project root:
@@ -28,21 +28,28 @@ This creates:
 
 ```
 my-project/
+├── CLAUDE.md
+├── .claude/
+│   └── commands/
+│       ├── syskit-guide.md
+│       ├── syskit-impact.md
+│       ├── syskit-propose.md
+│       ├── syskit-plan.md
+│       └── syskit-implement.md
 ├── doc/
 │   ├── requirements/
-│   │   └── req_000_template.md
+│   │   ├── req_000_template.md
+│   │   ├── states_and_modes.md
+│   │   └── quality_metrics.md
 │   ├── interfaces/
 │   │   └── int_000_template.md
 │   └── design/
-│       └── unit_000_template.md
+│       ├── unit_000_template.md
+│       ├── design_decisions.md
+│       └── concept_of_execution.md
 └── .syskit/
     ├── AGENTS.md
     ├── manifest.md
-    ├── commands/
-    │   ├── impact.md
-    │   ├── propose.md
-    │   ├── plan.md
-    │   └── implement.md
     ├── scripts/
     │   ├── manifest.sh
     │   ├── new-req.sh
@@ -56,6 +63,7 @@ my-project/
 
 After installation, use the slash commands in your AI assistant:
 
+- `/syskit-guide` — Interactive onboarding walkthrough (start here)
 - `/syskit-impact <change description>` — Analyze which specs are affected by a proposed change
 - `/syskit-propose` — Propose modifications to affected specs
 - `/syskit-plan` — Create implementation task breakdown

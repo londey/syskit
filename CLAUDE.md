@@ -7,14 +7,14 @@ This is the syskit tool repository. syskit is a lightweight specification-driven
 - `templates/` — Source templates that get embedded into the installer
 - `build/` — Build scripts
 - `test/` — Test scripts
-- `install.sh` — Generated installer (do not edit directly)
+- `install_syskit.sh` — Generated installer (do not edit directly)
 
 ## Development Workflow
 
 1. Edit templates in `templates/`
-2. Run `./build/generate-installer.sh` to regenerate `install.sh`
-3. Run `./test/test-install.sh` to verify
-4. Commit both templates and generated `install.sh`
+2. Run `./build/generate-installer.sh` to regenerate `install_syskit.sh`
+3. Run `./test/test-install_syskit.sh` to verify
+4. Commit both templates and generated `install_syskit.sh`
 
 ## Key Files
 
@@ -27,7 +27,7 @@ This is the syskit tool repository. syskit is a lightweight specification-driven
 
 ### Build
 
-- `build/generate-installer.sh` — Reads templates, generates `install.sh`
+- `build/generate-installer.sh` — Reads templates, generates `install_syskit.sh`
 
 ## Design Principles
 
@@ -42,7 +42,7 @@ Always run the test suite before committing:
 
 ```bash
 ./build/generate-installer.sh
-./test/test-install.sh
+./test/test-install_syskit.sh
 ```
 
 ## Adding New Templates

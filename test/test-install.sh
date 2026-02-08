@@ -4,7 +4,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-INSTALLER="$REPO_ROOT/install.sh"
+INSTALLER="$REPO_ROOT/install_syskit.sh"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

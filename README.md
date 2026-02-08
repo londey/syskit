@@ -14,14 +14,14 @@ syskit installs as a set of files in your repository—no runtime, no server, no
 ## Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/londey/syskit/refs/heads/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/londey/syskit/refs/heads/master/install_syskit.sh | bash
 ```
 
-Or download `install.sh` and run it in your project root:
+Or download `install_syskit.sh` and run it in your project root:
 
 ```bash
 cd my-project
-./install.sh
+./install_syskit.sh
 ```
 
 This creates:

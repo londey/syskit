@@ -1,11 +1,11 @@
 #!/bin/bash
-# Generate install.sh from templates
+# Generate install_syskit.sh from templates
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEMPLATES_DIR="$REPO_ROOT/templates"
-OUTPUT="$REPO_ROOT/install.sh"
+OUTPUT="$REPO_ROOT/install_syskit.sh"
 
 echo "Generating installer from templates..."
 

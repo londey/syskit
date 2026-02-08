@@ -20,23 +20,23 @@ syskit/
 │       └── commands/      # Claude Code slash commands
 ├── build/
 │   └── generate-installer.sh
-├── install.sh             # Generated installer (committed)
+├── install_syskit.sh             # Generated installer (committed)
 └── test/
-    └── test-install.sh
+    └── test-install_syskit.sh
 ```
 
 ## How It Works
 
-syskit is distributed as a single self-extracting shell script (`install.sh`). This script contains all templates embedded as heredocs and creates the necessary directory structure when run.
+syskit is distributed as a single self-extracting shell script (`install_syskit.sh`). This script contains all templates embedded as heredocs and creates the necessary directory structure when run.
 
-The `build/generate-installer.sh` script reads all files from `templates/` and generates `install.sh`.
+The `build/generate-installer.sh` script reads all files from `templates/` and generates `install_syskit.sh`.
 
 ## Development Workflow
 
 1. Edit templates in `templates/`
-2. Run `./build/generate-installer.sh` to regenerate `install.sh`
-3. Test with `./test/test-install.sh`
-4. Commit both the templates and the generated `install.sh`
+2. Run `./build/generate-installer.sh` to regenerate `install_syskit.sh`
+3. Test with `./test/test-install_syskit.sh`
+4. Commit both the templates and the generated `install_syskit.sh`
 
 ## Adding New Templates
 
@@ -72,14 +72,14 @@ The test script creates a temporary directory, runs the installer, and verifies:
 - Manifest generation works
 
 ```bash
-./test/test-install.sh
+./test/test-install_syskit.sh
 ```
 
 ## Design Principles
 
 1. **No runtime dependencies.** The installer is pure bash. Installed scripts are pure bash.
 
-2. **Readable output.** The installer should be auditable—anyone can read install.sh and see exactly what it does.
+2. **Readable output.** The installer should be auditable—anyone can read install_syskit.sh and see exactly what it does.
 
 3. **Idempotent installation.** Running the installer twice should be safe. Don't overwrite existing content files, only update tooling files.
 

@@ -1,0 +1,16 @@
+{
+  "name": "syskit",
+  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "Anthropic.claude-code"
+      ]
+    }
+  },
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code@latest && echo 'syskit dev container ready'"
+}

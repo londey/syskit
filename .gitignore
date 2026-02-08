@@ -10,3 +10,5 @@
 
 # Test artifacts
 /test/tmp/
+
+.claude/settings.local.json

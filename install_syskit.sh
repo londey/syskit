@@ -61,12 +61,32 @@ Working documents live under `.syskit/`:
 
 Requirements state WHAT the system must do, not HOW.
 
-- Use SHALL for mandatory requirements
-- Use SHOULD for recommended requirements  
-- Use MAY for optional requirements
-- Each requirement should be testable/verifiable
+**Required format** — every requirement must use the condition/response pattern:
+
+> **When** [condition/trigger], the system **SHALL/SHOULD/MAY** [observable behavior/response].
+
+- **SHALL** = mandatory, **SHOULD** = recommended, **MAY** = optional
 - Reference interfaces with `INT-NNN`
 - Allocate to design units with `UNIT-NNN`
+
+**Requirement quality criteria** — each requirement must be:
+
+- **Necessary:** Removing it would cause a system deficiency
+- **Singular:** Addresses one thing only — split compound requirements
+- **Correct:** Accurately describes the needed capability
+- **Unambiguous:** Has only one possible interpretation — no vague terms
+- **Feasible:** Can be implemented within known constraints
+- **Appropriate to Level:** Describes capabilities/behaviors, not implementation mechanisms
+- **Complete:** Contains all information needed to implement and verify
+- **Conforming:** Uses the project's standard template and condition/response format
+- **Verifiable:** The condition defines the test setup; the behavior defines the pass criterion
+
+**Level of abstraction** — if a requirement describes data layout, register fields, byte encoding, packet structure, memory maps, or wire protocols, that detail belongs in an interface document (`INT-NNN`), not a requirement. The requirement should reference the interface.
+
+- Wrong: "The system SHALL have an error counter" *(no condition, not testable)*
+- Wrong: "The system SHALL transmit a 16-byte header with bytes 0-3 as a big-endian sequence number" *(implementation detail, belongs in an interface)*
+- Right: "When the system receives a malformed message, the system SHALL discard the message and increment the error counter"
+- Right: "When the system transmits a message, the system SHALL include a unique sequence number per INT-005"
 
 ### Interfaces (`int_NNN_<name>.md`)
 
@@ -174,6 +194,87 @@ Use consistent identifiers when referencing between documents:
 
 These identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`
 __SYSKIT_TEMPLATE_END__
+
+# --- .syskit/scripts/manifest.sh ---
+info "Creating .syskit/scripts/manifest.sh"
+cat > ".syskit/scripts/manifest.sh" << '__SYSKIT_TEMPLATE_END__'
+#!/bin/bash
+# Generate manifest of all specification documents with SHA256 hashes
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+MANIFEST="$PROJECT_ROOT/.syskit/manifest.md"
+
+cd "$PROJECT_ROOT"
+
+cat > "$MANIFEST" << 'HEADER'
+# Specification Manifest
+
+This file tracks the SHA256 hashes of all specification documents.
+Used for freshness checking in impact analysis and task planning.
+
+HEADER
+
+echo "Generated: $(date -Iseconds)" >> "$MANIFEST"
+echo "" >> "$MANIFEST"
+
+# Function to hash files in a directory
+hash_directory() {
+    local dir=$1
+    local title=$2
+    
+    echo "## $title" >> "$MANIFEST"
+    echo "" >> "$MANIFEST"
+    
+    if [ ! -d "$dir" ]; then
+        echo "*No files*" >> "$MANIFEST"
+        echo "" >> "$MANIFEST"
+        return
+    fi
+    
+    local files=$(find "$dir" -name "*.md" -type f 2>/dev/null | sort)
+    
+    if [ -z "$files" ]; then
+        echo "*No files*" >> "$MANIFEST"
+        echo "" >> "$MANIFEST"
+        return
+    fi
+    
+    echo "| File | SHA256 | Modified |" >> "$MANIFEST"
+    echo "|------|--------|----------|" >> "$MANIFEST"
+    
+    for f in $files; do
+        # Get relative path from project root
+        local relpath="${f#$PROJECT_ROOT/}"
+        
+        # Get SHA256 (compatible with both Linux and macOS)
+        if command -v sha256sum &> /dev/null; then
+            local hash=$(sha256sum "$f" | cut -c1-16)
+        else
+            local hash=$(shasum -a 256 "$f" | cut -c1-16)
+        fi
+        
+        # Get modification date
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            local mod=$(stat -f "%Sm" -t "%Y-%m-%d" "$f")
+        else
+            local mod=$(date -r "$f" +%Y-%m-%d)
+        fi
+        
+        echo "| $relpath | \`$hash\` | $mod |" >> "$MANIFEST"
+    done
+    
+    echo "" >> "$MANIFEST"
+}
+
+hash_directory "doc/requirements" "Requirements"
+hash_directory "doc/interfaces" "Interfaces"
+hash_directory "doc/design" "Design"
+
+echo "Manifest updated: $MANIFEST"
+__SYSKIT_TEMPLATE_END__
+chmod +x ".syskit/scripts/manifest.sh"
 
 # --- .syskit/scripts/manifest-check.sh ---
 info "Creating .syskit/scripts/manifest-check.sh"
@@ -316,87 +417,6 @@ fi
 echo "Snapshot written: $SNAPSHOT"
 __SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/manifest-snapshot.sh"
-
-# --- .syskit/scripts/manifest.sh ---
-info "Creating .syskit/scripts/manifest.sh"
-cat > ".syskit/scripts/manifest.sh" << '__SYSKIT_TEMPLATE_END__'
-#!/bin/bash
-# Generate manifest of all specification documents with SHA256 hashes
-set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-MANIFEST="$PROJECT_ROOT/.syskit/manifest.md"
-
-cd "$PROJECT_ROOT"
-
-cat > "$MANIFEST" << 'HEADER'
-# Specification Manifest
-
-This file tracks the SHA256 hashes of all specification documents.
-Used for freshness checking in impact analysis and task planning.
-
-HEADER
-
-echo "Generated: $(date -Iseconds)" >> "$MANIFEST"
-echo "" >> "$MANIFEST"
-
-# Function to hash files in a directory
-hash_directory() {
-    local dir=$1
-    local title=$2
-    
-    echo "## $title" >> "$MANIFEST"
-    echo "" >> "$MANIFEST"
-    
-    if [ ! -d "$dir" ]; then
-        echo "*No files*" >> "$MANIFEST"
-        echo "" >> "$MANIFEST"
-        return
-    fi
-    
-    local files=$(find "$dir" -name "*.md" -type f 2>/dev/null | sort)
-    
-    if [ -z "$files" ]; then
-        echo "*No files*" >> "$MANIFEST"
-        echo "" >> "$MANIFEST"
-        return
-    fi
-    
-    echo "| File | SHA256 | Modified |" >> "$MANIFEST"
-    echo "|------|--------|----------|" >> "$MANIFEST"
-    
-    for f in $files; do
-        # Get relative path from project root
-        local relpath="${f#$PROJECT_ROOT/}"
-        
-        # Get SHA256 (compatible with both Linux and macOS)
-        if command -v sha256sum &> /dev/null; then
-            local hash=$(sha256sum "$f" | cut -c1-16)
-        else
-            local hash=$(shasum -a 256 "$f" | cut -c1-16)
-        fi
-        
-        # Get modification date
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            local mod=$(stat -f "%Sm" -t "%Y-%m-%d" "$f")
-        else
-            local mod=$(date -r "$f" +%Y-%m-%d)
-        fi
-        
-        echo "| $relpath | \`$hash\` | $mod |" >> "$MANIFEST"
-    done
-    
-    echo "" >> "$MANIFEST"
-}
-
-hash_directory "doc/requirements" "Requirements"
-hash_directory "doc/interfaces" "Interfaces"
-hash_directory "doc/design" "Design"
-
-echo "Manifest updated: $MANIFEST"
-__SYSKIT_TEMPLATE_END__
-chmod +x ".syskit/scripts/manifest.sh"
 
 # --- .syskit/scripts/new-int.sh ---
 info "Creating .syskit/scripts/new-int.sh"
@@ -550,7 +570,12 @@ cat > "$FILEPATH" << EOF
 
 ## Requirement
 
-The system SHALL ...
+When [condition/trigger], the system SHALL [observable behavior/response].
+
+<!-- Format: When [condition], the system SHALL/SHOULD/MAY [behavior].
+     Each requirement must have a testable trigger and observable outcome.
+     Describe capabilities/behaviors, not data layout or encoding.
+     For struct fields, byte formats, protocols → use an interface (INT-NNN). -->
 
 ## Rationale
 
@@ -751,7 +776,14 @@ Once they respond, create the requirement:
 2. Read the created file
 3. Walk the user through filling in each section interactively — ask them questions to populate:
    - **Classification:** Help them choose Priority (Essential/Important/Nice-to-have), Stability (Stable/Evolving/Volatile), and Verification method
-   - **Requirement statement:** Help them write a clear SHALL/SHOULD/MAY statement
+   - **Requirement statement:** Help them write the requirement in condition/response format: "When [condition], the system SHALL [observable behavior]."
+     Before finalizing the statement, validate it against the quality criteria:
+     1. **Condition/Response format** — Does it follow "When X, the system SHALL Y"? If not, help identify the trigger condition that makes this testable.
+     2. **Singular** — Does it address exactly one thing? If it uses "and" or "or" to combine distinct capabilities, split it into separate requirements.
+     3. **Appropriate Level** — Does it describe a capability or behavior (correct) rather than data layout, register fields, or encoding details (too low-level)? If it specifies struct fields, byte offsets, or protocol encoding, move that detail to an interface document and have the requirement reference the interface instead.
+     4. **Unambiguous** — Could two engineers interpret this differently? Eliminate vague terms like "fast", "efficient", "appropriate".
+     5. **Necessary** — Is this requirement essential, or is it an implementation detail that belongs in a design unit?
+     If the statement fails any check, explain the issue to the user and help them revise it before proceeding.
    - **Rationale:** Ask why this requirement exists
 4. Leave **Allocated To** and **Interfaces** as TBD — these will be filled in after creating those documents
 
@@ -770,6 +802,7 @@ Once they respond:
    - **Parties:** Leave Provider/Consumer as TBD until the design unit exists
    - **Referenced By:** Add the requirement just created (e.g., REQ-001)
    - **Specification:** Help them write at least an overview of what this interface does
+   - Help the user understand that detailed data layouts, field definitions, register maps, and encoding specifications belong here in the interface document — not in requirements. If the user described low-level details during requirement creation that were redirected here, incorporate them into the interface specification.
 
 Write the completed content to the file.
 
@@ -1284,6 +1317,19 @@ For each affected document, propose specific modifications:
 3. Show the proposed new content
 4. Note any ripple effects to other documents
 
+### Step 4.5: Validate Requirement Quality
+
+For any proposed changes to requirement documents, validate each requirement statement against the quality criteria before including it in the proposal:
+
+1. **Format:** Each requirement must use the condition/response pattern: "When [condition], the system SHALL [observable behavior]." If a proposed requirement lacks a trigger condition, identify one and rewrite it.
+2. **Appropriate Level:** If the proposed requirement specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this and recommend:
+   - Create or update an interface document with the detailed specification
+   - Rewrite the requirement to reference the interface (e.g., "When X occurs, the system SHALL conform to INT-NNN")
+3. **Singular:** If a proposed requirement addresses multiple capabilities, recommend splitting it into separate requirements.
+4. **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion. If a requirement is too vague to test, recommend making it more specific.
+
+If any proposed requirement fails validation, include the quality issue in the "Rationale" section of the proposal and present a corrected version alongside the original for user review.
+
 ### Step 5: Write Proposed Changes
 
 Create/update `.syskit/analysis/<folder>/proposed_changes.md`:
@@ -1459,12 +1505,13 @@ Or copy this template and modify.
 
 ## Requirement
 
-The system SHALL ...
+When [condition/trigger], the system SHALL [observable behavior/response].
 
-Use:
-- **SHALL** for mandatory requirements
-- **SHOULD** for recommended requirements
-- **MAY** for optional requirements
+Format: **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
+
+- Each requirement must have a testable trigger condition and observable outcome
+- Describe capabilities/behaviors, not data layout or encoding
+- For struct fields, byte formats, protocols → create an interface (INT-NNN) and reference it
 
 ## Rationale
 

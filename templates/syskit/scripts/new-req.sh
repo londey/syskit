@@ -52,7 +52,12 @@ cat > "$FILEPATH" << EOF
 
 ## Requirement
 
-The system SHALL ...
+When [condition/trigger], the system SHALL [observable behavior/response].
+
+<!-- Format: When [condition], the system SHALL/SHOULD/MAY [behavior].
+     Each requirement must have a testable trigger and observable outcome.
+     Describe capabilities/behaviors, not data layout or encoding.
+     For struct fields, byte formats, protocols → use an interface (INT-NNN). -->
 
 ## Rationale
 

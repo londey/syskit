@@ -69,7 +69,7 @@ Always run impact analysis first:
 
 1. Create analysis folder: `.syskit/analysis/<date>_<change_name>/`
 2. Write `impact.md` listing affected documents with rationale
-3. Write `snapshot.md` with SHA256 of each referenced document
+3. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <analysis-folder> [files...]`
 4. Write `proposed_changes.md` with specific modifications to each affected document
 5. Wait for human approval before modifying `doc/` files
 
@@ -80,7 +80,7 @@ After spec changes are approved and applied:
 1. Create task folder: `.syskit/tasks/<date>_<change_name>/`
 2. Write `plan.md` with implementation strategy
 3. Write individual `task_NNN_<name>.md` files for each discrete task
-4. Include `snapshot.md` referencing current doc hashes
+4. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <task-folder> [files...]`
 5. Tasks should be small enough to implement and verify independently
 
 ### Implementing
@@ -94,14 +94,20 @@ After spec changes are approved and applied:
 
 Analysis and task files include SHA256 snapshots of referenced documents.
 
-When loading previous analysis or tasks:
+When loading previous analysis or tasks, run the check script:
 
-1. Compare snapshot hashes against current manifest
-2. Flag any documents that have changed:
-   - ✓ unchanged — analysis still valid for this document
-   - ⚠ modified — review if changes affect analysis
-   - ✗ deleted — analysis references removed document
-3. If critical documents changed, recommend re-running analysis
+```bash
+.syskit/scripts/manifest-check.sh <path-to-snapshot.md>
+```
+
+The script compares snapshot hashes against current file state and reports:
+- ✓ unchanged — analysis still valid for this document
+- ⚠ modified — review if changes affect analysis
+- ✗ deleted — analysis references removed document
+
+Exit code 0 means all documents are fresh; exit code 1 means some have changed.
+
+If critical documents changed, recommend re-running analysis.
 
 ## File Numbering
 

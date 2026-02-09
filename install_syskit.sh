@@ -106,7 +106,7 @@ Always run impact analysis first:
 
 1. Create analysis folder: `.syskit/analysis/<date>_<change_name>/`
 2. Write `impact.md` listing affected documents with rationale
-3. Write `snapshot.md` with SHA256 of each referenced document
+3. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <analysis-folder> [files...]`
 4. Write `proposed_changes.md` with specific modifications to each affected document
 5. Wait for human approval before modifying `doc/` files
 
@@ -117,7 +117,7 @@ After spec changes are approved and applied:
 1. Create task folder: `.syskit/tasks/<date>_<change_name>/`
 2. Write `plan.md` with implementation strategy
 3. Write individual `task_NNN_<name>.md` files for each discrete task
-4. Include `snapshot.md` referencing current doc hashes
+4. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <task-folder> [files...]`
 5. Tasks should be small enough to implement and verify independently
 
 ### Implementing
@@ -131,14 +131,20 @@ After spec changes are approved and applied:
 
 Analysis and task files include SHA256 snapshots of referenced documents.
 
-When loading previous analysis or tasks:
+When loading previous analysis or tasks, run the check script:
 
-1. Compare snapshot hashes against current manifest
-2. Flag any documents that have changed:
-   - ✓ unchanged — analysis still valid for this document
-   - ⚠ modified — review if changes affect analysis
-   - ✗ deleted — analysis references removed document
-3. If critical documents changed, recommend re-running analysis
+```bash
+.syskit/scripts/manifest-check.sh <path-to-snapshot.md>
+```
+
+The script compares snapshot hashes against current file state and reports:
+- ✓ unchanged — analysis still valid for this document
+- ⚠ modified — review if changes affect analysis
+- ✗ deleted — analysis references removed document
+
+Exit code 0 means all documents are fresh; exit code 1 means some have changed.
+
+If critical documents changed, recommend re-running analysis.
 
 ## File Numbering
 
@@ -168,6 +174,148 @@ Use consistent identifiers when referencing between documents:
 
 These identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`
 __SYSKIT_TEMPLATE_END__
+
+# --- .syskit/scripts/manifest-check.sh ---
+info "Creating .syskit/scripts/manifest-check.sh"
+cat > ".syskit/scripts/manifest-check.sh" << '__SYSKIT_TEMPLATE_END__'
+#!/bin/bash
+# Check freshness of a snapshot against current file hashes
+# Usage: manifest-check.sh <snapshot-file>
+# Exit codes: 0 = all fresh, 1 = stale or deleted files found
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+SNAPSHOT="${1:-}"
+
+if [ -z "$SNAPSHOT" ]; then
+    echo "Usage: manifest-check.sh <snapshot-file>" >&2
+    exit 1
+fi
+
+if [ ! -f "$SNAPSHOT" ]; then
+    echo "Error: snapshot not found: $SNAPSHOT" >&2
+    exit 1
+fi
+
+# Determine hash command (Linux vs macOS)
+if command -v sha256sum &> /dev/null; then
+    hash_cmd() { sha256sum "$1" | cut -c1-16; }
+else
+    hash_cmd() { shasum -a 256 "$1" | cut -c1-16; }
+fi
+
+STALE=0
+
+echo "# Freshness Check"
+echo ""
+echo "Snapshot: $SNAPSHOT"
+echo ""
+
+while IFS='|' read -r _ file hash _; do
+    file=$(echo "$file" | xargs)
+    hash=$(echo "$hash" | sed 's/`//g' | xargs)
+
+    filepath="$PROJECT_ROOT/$file"
+
+    if [ ! -f "$filepath" ]; then
+        echo "✗ deleted  — $file"
+        STALE=1
+    else
+        current=$(hash_cmd "$filepath")
+        if [ "$hash" = "$current" ]; then
+            echo "✓ unchanged — $file"
+        else
+            echo "⚠ modified  — $file"
+            STALE=1
+        fi
+    fi
+done < <(grep '^| doc/' "$SNAPSHOT")
+
+if [ "$STALE" -eq 0 ]; then
+    echo ""
+    echo "All documents are fresh."
+else
+    echo ""
+    echo "Some documents have changed since the snapshot was taken."
+fi
+
+exit $STALE
+__SYSKIT_TEMPLATE_END__
+chmod +x ".syskit/scripts/manifest-check.sh"
+
+# --- .syskit/scripts/manifest-snapshot.sh ---
+info "Creating .syskit/scripts/manifest-snapshot.sh"
+cat > ".syskit/scripts/manifest-snapshot.sh" << '__SYSKIT_TEMPLATE_END__'
+#!/bin/bash
+# Generate a snapshot.md capturing current SHA256 hashes of specified doc files
+# Usage: manifest-snapshot.sh <output-dir> [file1 file2 ...]
+#   If no files specified, snapshots all files listed in the manifest
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+MANIFEST="$PROJECT_ROOT/.syskit/manifest.md"
+
+OUTPUT_DIR="${1:-.}"
+shift 2>/dev/null || true
+
+if [ ! -d "$OUTPUT_DIR" ]; then
+    echo "Error: output directory does not exist: $OUTPUT_DIR" >&2
+    exit 1
+fi
+
+SNAPSHOT="$OUTPUT_DIR/snapshot.md"
+
+# Determine hash command (Linux vs macOS)
+if command -v sha256sum &> /dev/null; then
+    hash_cmd() { sha256sum "$1" | cut -c1-16; }
+else
+    hash_cmd() { shasum -a 256 "$1" | cut -c1-16; }
+fi
+
+cat > "$SNAPSHOT" << EOF
+# Document Snapshot
+
+Captured: $(date -Iseconds)
+
+| File | SHA256 |
+|------|--------|
+EOF
+
+if [ $# -gt 0 ]; then
+    # Snapshot specified files
+    for file in "$@"; do
+        filepath="$PROJECT_ROOT/$file"
+        if [ -f "$filepath" ]; then
+            hash=$(hash_cmd "$filepath")
+            echo "| $file | \`$hash\` |" >> "$SNAPSHOT"
+        else
+            echo "Warning: file not found: $file" >&2
+        fi
+    done
+else
+    # Snapshot all files from the manifest
+    if [ ! -f "$MANIFEST" ]; then
+        echo "Error: no files specified and manifest not found at $MANIFEST" >&2
+        echo "Run .syskit/scripts/manifest.sh first, or specify files explicitly" >&2
+        exit 1
+    fi
+
+    cd "$PROJECT_ROOT"
+    grep '^| doc/' "$MANIFEST" | while IFS='|' read -r _ file _ _; do
+        file=$(echo "$file" | xargs)
+        if [ -f "$file" ]; then
+            hash=$(hash_cmd "$file")
+            echo "| $file | \`$hash\` |" >> "$SNAPSHOT"
+        fi
+    done
+fi
+
+echo "Snapshot written: $SNAPSHOT"
+__SYSKIT_TEMPLATE_END__
+chmod +x ".syskit/scripts/manifest-snapshot.sh"
 
 # --- .syskit/scripts/manifest.sh ---
 info "Creating .syskit/scripts/manifest.sh"
@@ -764,7 +912,7 @@ Categorize impacts as:
 Create `.syskit/analysis/{{DATE}}_<change_name>/` with:
 
 1. `impact.md` — The impact report (format below)
-2. `snapshot.md` — SHA256 of each analyzed document from manifest
+2. `snapshot.md` — Generated by running: `.syskit/scripts/manifest-snapshot.sh .syskit/analysis/{{DATE}}_<change_name>/ <affected-files...>`
 
 ### Step 4: Output Impact Report
 
@@ -864,9 +1012,13 @@ Otherwise:
 
 ### Step 2: Check Freshness
 
-Compare snapshot hashes against `.syskit/manifest.md`:
+Run the freshness check script:
 
-- If referenced specifications changed, warn user
+```bash
+.syskit/scripts/manifest-check.sh .syskit/tasks/<folder>/snapshot.md
+```
+
+- If referenced specifications changed (exit code 1), warn user
 - Changes to specs may invalidate the task plan
 - Recommend re-running `/syskit-plan` if changes are significant
 
@@ -983,7 +1135,7 @@ For each specification change, identify:
 Create `.syskit/tasks/<date>_<change_name>/` with:
 
 1. `plan.md` — Overall implementation strategy
-2. `snapshot.md` — SHA256 of relevant documents at planning time
+2. `snapshot.md` — Generated by running: `.syskit/scripts/manifest-snapshot.sh .syskit/tasks/<date>_<change_name>/ <relevant-files...>`
 3. `task_001_<n>.md` through `task_NNN_<n>.md` — Individual tasks
 
 ### Step 5: Write Implementation Plan
@@ -1109,9 +1261,13 @@ Otherwise:
 
 ### Step 2: Check Freshness
 
-Compare snapshot hashes against `.syskit/manifest.md`:
+Run the freshness check script:
 
-- If any affected documents have changed since analysis, warn the user
+```bash
+.syskit/scripts/manifest-check.sh .syskit/analysis/<folder>/snapshot.md
+```
+
+- If any affected documents have changed (exit code 1), warn the user
 - Recommend re-running impact analysis if changes are significant
 - Proceed with caution if user confirms
 

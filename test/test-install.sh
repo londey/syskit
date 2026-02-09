@@ -64,6 +64,8 @@ for file in \
     ".syskit/AGENTS.md" \
     ".syskit/manifest.md" \
     ".syskit/scripts/manifest.sh" \
+    ".syskit/scripts/manifest-snapshot.sh" \
+    ".syskit/scripts/manifest-check.sh" \
     ".syskit/scripts/new-req.sh" \
     ".syskit/scripts/new-int.sh" \
     ".syskit/scripts/new-unit.sh" \
@@ -93,6 +95,8 @@ echo "Checking scripts are executable..."
 
 for script in \
     ".syskit/scripts/manifest.sh" \
+    ".syskit/scripts/manifest-snapshot.sh" \
+    ".syskit/scripts/manifest-check.sh" \
     ".syskit/scripts/new-req.sh" \
     ".syskit/scripts/new-int.sh" \
     ".syskit/scripts/new-unit.sh"
@@ -151,6 +155,39 @@ if .syskit/scripts/manifest.sh > /dev/null; then
 else
     fail "manifest.sh failed"
 fi
+
+# Test manifest-snapshot.sh
+mkdir -p .syskit/test-analysis
+if .syskit/scripts/manifest-snapshot.sh .syskit/test-analysis doc/requirements/req_001_test_requirement.md > /dev/null; then
+    if [ -f ".syskit/test-analysis/snapshot.md" ]; then
+        if grep -q "req_001_test_requirement.md" .syskit/test-analysis/snapshot.md; then
+            pass "manifest-snapshot.sh creates snapshot with file hash"
+        else
+            fail "manifest-snapshot.sh snapshot missing expected file"
+        fi
+    else
+        fail "manifest-snapshot.sh did not create snapshot.md"
+    fi
+else
+    fail "manifest-snapshot.sh failed"
+fi
+
+# Test manifest-check.sh (unchanged file should pass)
+if .syskit/scripts/manifest-check.sh .syskit/test-analysis/snapshot.md > /dev/null 2>&1; then
+    pass "manifest-check.sh reports fresh snapshot"
+else
+    fail "manifest-check.sh incorrectly reported stale snapshot"
+fi
+
+# Test manifest-check.sh (modified file should fail)
+echo "modified content" >> doc/requirements/req_001_test_requirement.md
+if .syskit/scripts/manifest-check.sh .syskit/test-analysis/snapshot.md > /dev/null 2>&1; then
+    fail "manifest-check.sh did not detect modified file"
+else
+    pass "manifest-check.sh detects modified file"
+fi
+
+rm -rf .syskit/test-analysis
 
 echo ""
 echo "Testing idempotent installation..."

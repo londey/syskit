@@ -89,7 +89,7 @@ Always run impact analysis first:
 
 1. Create analysis folder: `.syskit/analysis/<date>_<change_name>/`
 2. Write `impact.md` listing affected documents with rationale
-3. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <analysis-folder> [files...]`
+3. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <analysis-folder>`
 4. Write `proposed_changes.md` with specific modifications to each affected document
 5. Wait for human approval before modifying `doc/` files
 
@@ -100,7 +100,7 @@ After spec changes are approved and applied:
 1. Create task folder: `.syskit/tasks/<date>_<change_name>/`
 2. Write `plan.md` with implementation strategy
 3. Write individual `task_NNN_<name>.md` files for each discrete task
-4. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <task-folder> [files...]`
+4. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <task-folder>`
 5. Tasks should be small enough to implement and verify independently
 
 ### Implementing

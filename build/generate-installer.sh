@@ -81,14 +81,14 @@ embed_file() {
 # Embed AGENTS.md
 embed_file "$TEMPLATES_DIR/syskit/AGENTS.md" ".syskit/AGENTS.md" >> "$OUTPUT"
 
-# Embed scripts (executable)
-for f in "$TEMPLATES_DIR/syskit/scripts/"*.sh; do
+# Embed scripts (executable, sorted for reproducible output)
+for f in $(printf '%s\n' "$TEMPLATES_DIR/syskit/scripts/"*.sh | LC_COLLATE=C sort); do
     name=$(basename "$f")
     embed_file "$f" ".syskit/scripts/$name" "755" >> "$OUTPUT"
 done
 
-# Embed Claude commands
-for f in "$TEMPLATES_DIR/claude/commands/"*.md; do
+# Embed Claude commands (sorted for reproducible output)
+for f in $(printf '%s\n' "$TEMPLATES_DIR/claude/commands/"*.md | LC_COLLATE=C sort); do
     name=$(basename "$f")
     embed_file "$f" ".claude/commands/$name" >> "$OUTPUT"
 done

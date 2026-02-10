@@ -59,6 +59,7 @@ Interfaces define contracts. They may be:
 - **External:** Defined elsewhere (PNG format, SPI protocol, USB spec)
 
 For external interfaces, document:
+
 - The external specification and version
 - How this system uses/constrains it
 - What subset of features are supported
@@ -108,7 +109,8 @@ After spec changes are approved and applied:
 1. Work through tasks in order
 2. After each task, verify against relevant requirements
 3. Update design unit documents if implementation details change
-4. Run `.syskit/scripts/manifest.sh` after doc changes
+4. Run `.syskit/scripts/trace-sync.sh` to verify cross-references are consistent
+5. Run `.syskit/scripts/manifest.sh` after doc changes
 
 ## Freshness Checking
 
@@ -121,6 +123,7 @@ When loading previous analysis or tasks, run the check script:
 ```
 
 The script compares snapshot hashes against current file state and reports:
+
 - ✓ unchanged — analysis still valid for this document
 - ⚠ modified — review if changes affect analysis
 - ✗ deleted — analysis references removed document
@@ -151,8 +154,31 @@ Or use the helper scripts:
 Use consistent identifiers when referencing between documents:
 
 - `REQ-001` — Requirement 001
-- `REQ-001.3` — Third sub-requirement of requirement 001
 - `INT-005` — Interface 005
 - `UNIT-012` — Design unit 012
 
 These identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`
+
+For hierarchical requirements, use the `Parent Requirements` field in each child
+requirement file rather than sub-requirement IDs. Each requirement gets its own file.
+
+### Cross-Reference Sync
+
+After modifying cross-references, run the sync tool to check consistency:
+
+```bash
+.syskit/scripts/trace-sync.sh          # check mode — report issues
+.syskit/scripts/trace-sync.sh --fix    # fix mode — add missing back-references
+```
+
+This tool verifies bidirectional links between documents:
+
+- REQ "Allocated To" ↔ UNIT "Implements Requirements"
+- REQ "Interfaces" ↔ INT "Referenced By"
+- UNIT "Provides" ↔ INT "Parties Provider"
+- UNIT "Consumes" ↔ INT "Parties Consumer"
+
+It also reports broken references (IDs with no matching file) and orphan documents.
+
+**Important:** Do not write custom Python scripts or ad-hoc tools for traceability updates.
+Use `trace-sync.sh` — it requires only standard bash tools.

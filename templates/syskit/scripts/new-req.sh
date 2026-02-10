@@ -6,11 +6,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REQ_DIR="$PROJECT_ROOT/doc/requirements"
 
-NAME=$1
+PARENT=""
+if [ "${1:-}" = "--parent" ]; then
+    PARENT="$2"
+    shift 2
+fi
+
+NAME="${1:-}"
 
 if [ -z "$NAME" ]; then
-    echo "Usage: new-req.sh <requirement_name>"
+    echo "Usage: new-req.sh [--parent REQ-NNN] <requirement_name>"
     echo "Example: new-req.sh spi_interface"
+    echo "Example: new-req.sh --parent REQ-001 spi_voltage_levels"
     exit 1
 fi
 
@@ -65,7 +72,7 @@ When [condition/trigger], the system SHALL [observable behavior/response].
 
 ## Parent Requirements
 
-- None
+- ${PARENT:-None}
 
 ## Allocated To
 

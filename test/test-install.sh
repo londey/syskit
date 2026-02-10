@@ -72,6 +72,7 @@ for file in \
     ".syskit/scripts/new-req.sh" \
     ".syskit/scripts/new-int.sh" \
     ".syskit/scripts/new-unit.sh" \
+    ".syskit/scripts/trace-sync.sh" \
     ".claude/commands/syskit-impact.md" \
     ".claude/commands/syskit-propose.md" \
     ".claude/commands/syskit-plan.md" \
@@ -109,7 +110,8 @@ for script in \
     ".syskit/scripts/manifest-check.sh" \
     ".syskit/scripts/new-req.sh" \
     ".syskit/scripts/new-int.sh" \
-    ".syskit/scripts/new-unit.sh"
+    ".syskit/scripts/new-unit.sh" \
+    ".syskit/scripts/trace-sync.sh"
 do
     if [ -x "$script" ]; then
         pass "Executable: $script"
@@ -198,6 +200,50 @@ else
 fi
 
 rm -rf .syskit/test-analysis
+
+echo ""
+echo "Testing trace-sync..."
+
+# Undo the modification from manifest test
+git checkout -- doc/requirements/req_001_test_requirement.md 2>/dev/null || true
+
+# Add cross-reference: REQ-001 allocated to UNIT-001
+sed -i 's/- UNIT-NNN (<unit name>)/- UNIT-001 (Test Unit)/' doc/requirements/req_001_test_requirement.md
+
+# Check mode should find missing back-reference
+if .syskit/scripts/trace-sync.sh 2>/dev/null | grep -q "MISSING"; then
+    pass "trace-sync.sh detects missing back-reference"
+else
+    fail "trace-sync.sh did not detect missing back-reference"
+fi
+
+# Fix mode should resolve it
+if .syskit/scripts/trace-sync.sh --fix 2>/dev/null | grep -q "FIXED"; then
+    pass "trace-sync.sh --fix adds missing back-reference"
+else
+    fail "trace-sync.sh --fix did not add back-reference"
+fi
+
+# Verify: no more MISSING after fix (orphans may remain)
+if .syskit/scripts/trace-sync.sh 2>/dev/null | grep -q "MISSING"; then
+    fail "trace-sync.sh still reports missing references after fix"
+else
+    pass "trace-sync.sh confirms no missing references after fix"
+fi
+
+echo ""
+echo "Testing new-req.sh --parent flag..."
+
+# Create a child requirement with --parent
+if .syskit/scripts/new-req.sh --parent REQ-001 child_requirement > /dev/null; then
+    if grep -q "REQ-001" doc/requirements/req_002_child_requirement.md; then
+        pass "new-req.sh --parent sets parent reference"
+    else
+        fail "new-req.sh --parent did not set parent reference"
+    fi
+else
+    fail "new-req.sh --parent failed"
+fi
 
 echo ""
 echo "Testing idempotent installation..."

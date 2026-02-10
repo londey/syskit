@@ -29,6 +29,9 @@ mkdir -p doc/design
 mkdir -p .syskit/scripts
 mkdir -p .syskit/analysis
 mkdir -p .syskit/tasks
+mkdir -p .syskit/templates/doc/requirements
+mkdir -p .syskit/templates/doc/interfaces
+mkdir -p .syskit/templates/doc/design
 mkdir -p .claude/commands
 
 
@@ -1399,10 +1402,71 @@ Present a summary of all proposed changes and ask:
 - 'reject' to discard this proposal"
 __SYSKIT_TEMPLATE_END__
 
-# --- doc/requirements/quality_metrics.md ---
-if [ ! -f "doc/requirements/quality_metrics.md" ]; then
-info "Creating doc/requirements/quality_metrics.md"
-cat > "doc/requirements/quality_metrics.md" << '__SYSKIT_TEMPLATE_END__'
+# --- .syskit/templates/doc/requirements/req_000_template.md ---
+info "Creating .syskit/templates/doc/requirements/req_000_template.md"
+cat > ".syskit/templates/doc/requirements/req_000_template.md" << '__SYSKIT_TEMPLATE_END__'
+# REQ-000: Template
+
+This is a template file. Create new requirements using:
+
+```bash
+.syskit/scripts/new-req.sh <requirement_name>
+```
+
+Or copy this template and modify.
+
+---
+
+## Classification
+
+- **Priority:** Essential | Important | Nice-to-have
+- **Stability:** Stable | Evolving | Volatile
+- **Verification:** Test | Analysis | Inspection | Demonstration
+
+## Requirement
+
+When [condition/trigger], the system SHALL [observable behavior/response].
+
+Format: **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
+
+- Each requirement must have a testable trigger condition and observable outcome
+- Describe capabilities/behaviors, not data layout or encoding
+- For struct fields, byte formats, protocols → create an interface (INT-NNN) and reference it
+
+## Rationale
+
+<Why this requirement exists. What problem does it solve? What drives this need?>
+
+## Parent Requirements
+
+- REQ-NNN (<parent requirement name>)
+- Or "None" if this is a top-level requirement
+
+## Allocated To
+
+- UNIT-NNN (<unit name>)
+
+## Interfaces
+
+- INT-NNN (<interface name>)
+
+## Verification Method
+
+<How this requirement will be verified>
+
+- **Test:** Verified by executing a test procedure
+- **Analysis:** Verified by technical evaluation
+- **Inspection:** Verified by examination
+- **Demonstration:** Verified by operation
+
+## Notes
+
+<Additional context, open questions, or references>
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/templates/doc/requirements/quality_metrics.md ---
+info "Creating .syskit/templates/doc/requirements/quality_metrics.md"
+cat > ".syskit/templates/doc/requirements/quality_metrics.md" << '__SYSKIT_TEMPLATE_END__'
 # Quality Metrics
 
 This document defines the quality attributes and metrics for the system.
@@ -1477,80 +1541,10 @@ This document defines the quality attributes and metrics for the system.
 - **Target:** 100% of SHALL requirements
 - **Measurement:** Traceability analysis
 __SYSKIT_TEMPLATE_END__
-else
-    info "Skipping doc/requirements/quality_metrics.md (already exists)"
-fi
 
-# --- doc/requirements/req_000_template.md ---
-if [ ! -f "doc/requirements/req_000_template.md" ]; then
-info "Creating doc/requirements/req_000_template.md"
-cat > "doc/requirements/req_000_template.md" << '__SYSKIT_TEMPLATE_END__'
-# REQ-000: Template
-
-This is a template file. Create new requirements using:
-
-```bash
-.syskit/scripts/new-req.sh <requirement_name>
-```
-
-Or copy this template and modify.
-
----
-
-## Classification
-
-- **Priority:** Essential | Important | Nice-to-have
-- **Stability:** Stable | Evolving | Volatile
-- **Verification:** Test | Analysis | Inspection | Demonstration
-
-## Requirement
-
-When [condition/trigger], the system SHALL [observable behavior/response].
-
-Format: **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
-
-- Each requirement must have a testable trigger condition and observable outcome
-- Describe capabilities/behaviors, not data layout or encoding
-- For struct fields, byte formats, protocols → create an interface (INT-NNN) and reference it
-
-## Rationale
-
-<Why this requirement exists. What problem does it solve? What drives this need?>
-
-## Parent Requirements
-
-- REQ-NNN (<parent requirement name>)
-- Or "None" if this is a top-level requirement
-
-## Allocated To
-
-- UNIT-NNN (<unit name>)
-
-## Interfaces
-
-- INT-NNN (<interface name>)
-
-## Verification Method
-
-<How this requirement will be verified>
-
-- **Test:** Verified by executing a test procedure
-- **Analysis:** Verified by technical evaluation
-- **Inspection:** Verified by examination
-- **Demonstration:** Verified by operation
-
-## Notes
-
-<Additional context, open questions, or references>
-__SYSKIT_TEMPLATE_END__
-else
-    info "Skipping doc/requirements/req_000_template.md (already exists)"
-fi
-
-# --- doc/requirements/states_and_modes.md ---
-if [ ! -f "doc/requirements/states_and_modes.md" ]; then
-info "Creating doc/requirements/states_and_modes.md"
-cat > "doc/requirements/states_and_modes.md" << '__SYSKIT_TEMPLATE_END__'
+# --- .syskit/templates/doc/requirements/states_and_modes.md ---
+info "Creating .syskit/templates/doc/requirements/states_and_modes.md"
+cat > ".syskit/templates/doc/requirements/states_and_modes.md" << '__SYSKIT_TEMPLATE_END__'
 # States and Modes
 
 This document defines the operational states and modes of the system.
@@ -1607,14 +1601,10 @@ This document defines the operational states and modes of the system.
 | Mode 1 | ✓ | ✓ | ✗ |
 | Mode 2 | ✓ | ✗ | ✓ |
 __SYSKIT_TEMPLATE_END__
-else
-    info "Skipping doc/requirements/states_and_modes.md (already exists)"
-fi
 
-# --- doc/interfaces/int_000_template.md ---
-if [ ! -f "doc/interfaces/int_000_template.md" ]; then
-info "Creating doc/interfaces/int_000_template.md"
-cat > "doc/interfaces/int_000_template.md" << '__SYSKIT_TEMPLATE_END__'
+# --- .syskit/templates/doc/interfaces/int_000_template.md ---
+info "Creating .syskit/templates/doc/interfaces/int_000_template.md"
+cat > ".syskit/templates/doc/interfaces/int_000_template.md" << '__SYSKIT_TEMPLATE_END__'
 # INT-000: Template
 
 This is a template file. Create new interfaces using:
@@ -1691,123 +1681,10 @@ For APIs, consider:
 
 <Additional context, rationale for choices, compatibility considerations>
 __SYSKIT_TEMPLATE_END__
-else
-    info "Skipping doc/interfaces/int_000_template.md (already exists)"
-fi
 
-# --- doc/design/concept_of_execution.md ---
-if [ ! -f "doc/design/concept_of_execution.md" ]; then
-info "Creating doc/design/concept_of_execution.md"
-cat > "doc/design/concept_of_execution.md" << '__SYSKIT_TEMPLATE_END__'
-# Concept of Execution
-
-This document describes the runtime behavior of the system: how it starts up, how data flows through it, and how it responds to events.
-
-## System Overview
-
-<High-level description of what the system does at runtime>
-
-## Operational Modes
-
-Reference: `doc/requirements/states_and_modes.md`
-
-<Describe how the system behaves in each operational mode>
-
-## Startup Sequence
-
-<What happens when the system powers on or initializes>
-
-1. <Step 1>
-2. <Step 2>
-3. ...
-
-## Data Flow
-
-<How data moves through the system>
-
-Consider using a diagram:
-
-```
-┌─────────┐     ┌─────────┐     ┌─────────┐
-│ Input   │────▶│ Process │────▶│ Output  │
-└─────────┘     └─────────┘     └─────────┘
-```
-
-## Event Handling
-
-<How the system responds to events>
-
-### Event: <event name>
-
-- **Source:** <where the event comes from>
-- **Handler:** UNIT-NNN
-- **Response:** <what happens>
-
-## Timing and Synchronization
-
-<Any timing requirements or synchronization mechanisms>
-
-## Error Handling
-
-<How errors are detected and handled>
-
-## Resource Management
-
-<How resources (memory, buffers, connections) are managed>
-__SYSKIT_TEMPLATE_END__
-else
-    info "Skipping doc/design/concept_of_execution.md (already exists)"
-fi
-
-# --- doc/design/design_decisions.md ---
-if [ ! -f "doc/design/design_decisions.md" ]; then
-info "Creating doc/design/design_decisions.md"
-cat > "doc/design/design_decisions.md" << '__SYSKIT_TEMPLATE_END__'
-# Design Decisions
-
-This document records significant design decisions using a lightweight Architecture Decision Record (ADR) format.
-
-## Template
-
-When adding a new decision, copy this template:
-
-```markdown
-## DD-NNN: <Title>
-
-**Date:** YYYY-MM-DD  
-**Status:** Proposed | Accepted | Superseded by DD-XXX
-
-### Context
-
-<What is the issue or question that needs a decision?>
-
-### Decision
-
-<What is the decision that was made?>
-
-### Rationale
-
-<Why was this decision made? What alternatives were considered?>
-
-### Consequences
-
-<What are the implications of this decision?>
-```
-
----
-
-## Decisions
-
-<!-- Add decisions below, newest first -->
-__SYSKIT_TEMPLATE_END__
-else
-    info "Skipping doc/design/design_decisions.md (already exists)"
-fi
-
-# --- doc/design/unit_000_template.md ---
-if [ ! -f "doc/design/unit_000_template.md" ]; then
-info "Creating doc/design/unit_000_template.md"
-cat > "doc/design/unit_000_template.md" << '__SYSKIT_TEMPLATE_END__'
+# --- .syskit/templates/doc/design/unit_000_template.md ---
+info "Creating .syskit/templates/doc/design/unit_000_template.md"
+cat > ".syskit/templates/doc/design/unit_000_template.md" << '__SYSKIT_TEMPLATE_END__'
 # UNIT-000: Template
 
 This is a template file. Create new design units using:
@@ -1899,9 +1776,128 @@ Consider documenting:
 - Known limitations
 - Future improvement ideas
 __SYSKIT_TEMPLATE_END__
-else
-    info "Skipping doc/design/unit_000_template.md (already exists)"
-fi
+
+# --- .syskit/templates/doc/design/concept_of_execution.md ---
+info "Creating .syskit/templates/doc/design/concept_of_execution.md"
+cat > ".syskit/templates/doc/design/concept_of_execution.md" << '__SYSKIT_TEMPLATE_END__'
+# Concept of Execution
+
+This document describes the runtime behavior of the system: how it starts up, how data flows through it, and how it responds to events.
+
+## System Overview
+
+<High-level description of what the system does at runtime>
+
+## Operational Modes
+
+Reference: `doc/requirements/states_and_modes.md`
+
+<Describe how the system behaves in each operational mode>
+
+## Startup Sequence
+
+<What happens when the system powers on or initializes>
+
+1. <Step 1>
+2. <Step 2>
+3. ...
+
+## Data Flow
+
+<How data moves through the system>
+
+Consider using a diagram:
+
+```
+┌─────────┐     ┌─────────┐     ┌─────────┐
+│ Input   │────▶│ Process │────▶│ Output  │
+└─────────┘     └─────────┘     └─────────┘
+```
+
+## Event Handling
+
+<How the system responds to events>
+
+### Event: <event name>
+
+- **Source:** <where the event comes from>
+- **Handler:** UNIT-NNN
+- **Response:** <what happens>
+
+## Timing and Synchronization
+
+<Any timing requirements or synchronization mechanisms>
+
+## Error Handling
+
+<How errors are detected and handled>
+
+## Resource Management
+
+<How resources (memory, buffers, connections) are managed>
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/templates/doc/design/design_decisions.md ---
+info "Creating .syskit/templates/doc/design/design_decisions.md"
+cat > ".syskit/templates/doc/design/design_decisions.md" << '__SYSKIT_TEMPLATE_END__'
+# Design Decisions
+
+This document records significant design decisions using a lightweight Architecture Decision Record (ADR) format.
+
+## Template
+
+When adding a new decision, copy this template:
+
+```markdown
+## DD-NNN: <Title>
+
+**Date:** YYYY-MM-DD  
+**Status:** Proposed | Accepted | Superseded by DD-XXX
+
+### Context
+
+<What is the issue or question that needs a decision?>
+
+### Decision
+
+<What is the decision that was made?>
+
+### Rationale
+
+<Why was this decision made? What alternatives were considered?>
+
+### Consequences
+
+<What are the implications of this decision?>
+```
+
+---
+
+## Decisions
+
+<!-- Add decisions below, newest first -->
+__SYSKIT_TEMPLATE_END__
+
+# Copy-templates: always overwrite
+info "Updating copy-templates in doc/..."
+cp .syskit/templates/doc/requirements/req_000_template.md doc/requirements/req_000_template.md
+cp .syskit/templates/doc/interfaces/int_000_template.md doc/interfaces/int_000_template.md
+cp .syskit/templates/doc/design/unit_000_template.md doc/design/unit_000_template.md
+
+# Framework docs: only create if missing
+for tmpl in \
+    "doc/requirements/quality_metrics.md" \
+    "doc/requirements/states_and_modes.md" \
+    "doc/design/concept_of_execution.md" \
+    "doc/design/design_decisions.md"
+do
+    if [ ! -f "$tmpl" ]; then
+        info "Creating $tmpl"
+        cp ".syskit/templates/$tmpl" "$tmpl"
+    else
+        info "Skipping $tmpl (already exists)"
+    fi
+done
 
 # Generate initial manifest
 info "Generating manifest..."

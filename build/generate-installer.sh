@@ -41,6 +41,9 @@ mkdir -p doc/design
 mkdir -p .syskit/scripts
 mkdir -p .syskit/analysis
 mkdir -p .syskit/tasks
+mkdir -p .syskit/templates/doc/requirements
+mkdir -p .syskit/templates/doc/interfaces
+mkdir -p .syskit/templates/doc/design
 mkdir -p .claude/commands
 
 SCRIPT_HEADER
@@ -90,21 +93,41 @@ for f in "$TEMPLATES_DIR/claude/commands/"*.md; do
     embed_file "$f" ".claude/commands/$name" >> "$OUTPUT"
 done
 
-# Embed doc templates (skip if exists to not overwrite user content)
-for f in "$TEMPLATES_DIR/doc/requirements/"*.md; do
-    name=$(basename "$f")
-    embed_file "$f" "doc/requirements/$name" "644" "true" >> "$OUTPUT"
-done
+# Embed doc templates to .syskit/templates/ (always overwrite — single source of truth)
+embed_file "$TEMPLATES_DIR/doc/requirements/req_000_template.md" ".syskit/templates/doc/requirements/req_000_template.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/requirements/quality_metrics.md" ".syskit/templates/doc/requirements/quality_metrics.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/requirements/states_and_modes.md" ".syskit/templates/doc/requirements/states_and_modes.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/interfaces/int_000_template.md" ".syskit/templates/doc/interfaces/int_000_template.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/design/unit_000_template.md" ".syskit/templates/doc/design/unit_000_template.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/design/concept_of_execution.md" ".syskit/templates/doc/design/concept_of_execution.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/design/design_decisions.md" ".syskit/templates/doc/design/design_decisions.md" "644" >> "$OUTPUT"
 
-for f in "$TEMPLATES_DIR/doc/interfaces/"*.md; do
-    name=$(basename "$f")
-    embed_file "$f" "doc/interfaces/$name" "644" "true" >> "$OUTPUT"
-done
+# Copy templates from .syskit/templates/ to doc/
+# Copy-templates: always overwrite (users copy these, not edit originals)
+# Framework docs: skip if exists (contain user content)
+cat >> "$OUTPUT" << 'COPY_TEMPLATES'
 
-for f in "$TEMPLATES_DIR/doc/design/"*.md; do
-    name=$(basename "$f")
-    embed_file "$f" "doc/design/$name" "644" "true" >> "$OUTPUT"
+# Copy-templates: always overwrite
+info "Updating copy-templates in doc/..."
+cp .syskit/templates/doc/requirements/req_000_template.md doc/requirements/req_000_template.md
+cp .syskit/templates/doc/interfaces/int_000_template.md doc/interfaces/int_000_template.md
+cp .syskit/templates/doc/design/unit_000_template.md doc/design/unit_000_template.md
+
+# Framework docs: only create if missing
+for tmpl in \
+    "doc/requirements/quality_metrics.md" \
+    "doc/requirements/states_and_modes.md" \
+    "doc/design/concept_of_execution.md" \
+    "doc/design/design_decisions.md"
+do
+    if [ ! -f "$tmpl" ]; then
+        info "Creating $tmpl"
+        cp ".syskit/templates/$tmpl" "$tmpl"
+    else
+        info "Skipping $tmpl (already exists)"
+    fi
 done
+COPY_TEMPLATES
 
 # Add manifest generation and completion
 cat >> "$OUTPUT" << 'SCRIPT_FOOTER'

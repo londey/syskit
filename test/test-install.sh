@@ -47,6 +47,9 @@ for dir in \
     ".syskit/scripts" \
     ".syskit/analysis" \
     ".syskit/tasks" \
+    ".syskit/templates/doc/requirements" \
+    ".syskit/templates/doc/interfaces" \
+    ".syskit/templates/doc/design" \
     ".claude/commands"
 do
     if [ -d "$dir" ]; then
@@ -81,6 +84,13 @@ for file in \
     "doc/design/design_decisions.md" \
     "doc/design/concept_of_execution.md" \
     "doc/design/unit_000_template.md" \
+    ".syskit/templates/doc/requirements/req_000_template.md" \
+    ".syskit/templates/doc/requirements/quality_metrics.md" \
+    ".syskit/templates/doc/requirements/states_and_modes.md" \
+    ".syskit/templates/doc/interfaces/int_000_template.md" \
+    ".syskit/templates/doc/design/unit_000_template.md" \
+    ".syskit/templates/doc/design/concept_of_execution.md" \
+    ".syskit/templates/doc/design/design_decisions.md" \
     "CLAUDE.md"
 do
     if [ -f "$file" ]; then
@@ -207,6 +217,42 @@ if bash "$INSTALLER" > /dev/null 2>&1; then
     fi
 else
     fail "Second installation failed"
+fi
+
+echo ""
+echo "Testing template overwrite behavior..."
+
+# Modify a copy-template (should be overwritten on re-install)
+echo "user modification" > doc/requirements/req_000_template.md
+# Modify a framework doc (should NOT be overwritten on re-install)
+echo "user customization" > doc/requirements/quality_metrics.md
+
+# Run installer again
+if bash "$INSTALLER" > /dev/null 2>&1; then
+    pass "Third installation succeeded"
+else
+    fail "Third installation failed"
+fi
+
+# Copy-template should be restored to original
+if grep -q "user modification" doc/requirements/req_000_template.md; then
+    fail "Copy-template was not overwritten on re-install"
+else
+    pass "Copy-template overwritten on re-install"
+fi
+
+# Framework doc should keep user content
+if grep -q "user customization" doc/requirements/quality_metrics.md; then
+    pass "Framework doc preserved user customization"
+else
+    fail "Framework doc was overwritten on re-install"
+fi
+
+# .syskit/templates/ should always have latest clean version
+if grep -q "REQ-000" .syskit/templates/doc/requirements/req_000_template.md; then
+    pass "Reference template in .syskit/templates/ has latest content"
+else
+    fail "Reference template in .syskit/templates/ missing or incorrect"
 fi
 
 echo ""

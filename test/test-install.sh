@@ -101,6 +101,7 @@ for file in \
     ".syskit/templates/doc/design/unit_000_template.md" \
     ".syskit/templates/doc/design/concept_of_execution.md" \
     ".syskit/templates/doc/design/design_decisions.md" \
+    ".syskit/templates/CLAUDE_SYSKIT.md" \
     "CLAUDE.md"
 do
     if [ -f "$file" ]; then
@@ -402,6 +403,60 @@ if grep -q "REQ-000" .syskit/templates/doc/requirements/req_000_template.md; the
     pass "Reference template in .syskit/templates/ has latest content"
 else
     fail "Reference template in .syskit/templates/ missing or incorrect"
+fi
+
+echo ""
+echo "Testing CLAUDE.md markers and updates..."
+
+# Verify markers exist from fresh install
+if grep -q "<!-- syskit-start -->" CLAUDE.md && grep -q "<!-- syskit-end -->" CLAUDE.md; then
+    pass "CLAUDE.md has syskit update markers"
+else
+    fail "CLAUDE.md missing syskit update markers"
+fi
+
+# Verify behavioral guidance content (not just command reference)
+if grep -q "Spec-ref" CLAUDE.md; then
+    pass "CLAUDE.md has behavioral guidance about Spec-ref"
+else
+    fail "CLAUDE.md missing behavioral guidance"
+fi
+
+# Test: re-install replaces section between markers
+sed -i 's/specification-driven/TAMPERED/' CLAUDE.md
+if grep -q "TAMPERED" CLAUDE.md; then
+    if bash "$INSTALLER" > /dev/null 2>&1; then
+        if grep -q "TAMPERED" CLAUDE.md; then
+            fail "CLAUDE.md syskit section was not updated on re-install"
+        else
+            pass "CLAUDE.md syskit section updated on re-install"
+        fi
+    else
+        fail "Installer failed during CLAUDE.md update test"
+    fi
+else
+    fail "sed tamper did not work (test setup error)"
+fi
+
+# Test: existing CLAUDE.md without syskit gets section appended
+echo "# My Project" > CLAUDE.md
+echo "" >> CLAUDE.md
+echo "Some existing content." >> CLAUDE.md
+if bash "$INSTALLER" > /dev/null 2>&1; then
+    if grep -q "My Project" CLAUDE.md && grep -q "<!-- syskit-start -->" CLAUDE.md; then
+        pass "Existing CLAUDE.md gets syskit section appended"
+    else
+        fail "Existing CLAUDE.md was not properly updated"
+    fi
+else
+    fail "Installer failed during append test"
+fi
+
+# Test: section preserves surrounding content
+if grep -q "Some existing content" CLAUDE.md; then
+    pass "Existing CLAUDE.md content preserved after append"
+else
+    fail "Existing CLAUDE.md content was lost"
 fi
 
 echo ""

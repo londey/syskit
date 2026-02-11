@@ -93,6 +93,9 @@ for f in $(printf '%s\n' "$TEMPLATES_DIR/claude/commands/"*.md | LC_COLLATE=C so
     embed_file "$f" ".claude/commands/$name" >> "$OUTPUT"
 done
 
+# Embed CLAUDE.md syskit section template
+embed_file "$TEMPLATES_DIR/claude/CLAUDE_SYSKIT.md" ".syskit/templates/CLAUDE_SYSKIT.md" "644" >> "$OUTPUT"
+
 # Embed doc templates to .syskit/templates/ (always overwrite — single source of truth)
 embed_file "$TEMPLATES_DIR/doc/requirements/req_000_template.md" ".syskit/templates/doc/requirements/req_000_template.md" "644" >> "$OUTPUT"
 embed_file "$TEMPLATES_DIR/doc/requirements/quality_metrics.md" ".syskit/templates/doc/requirements/quality_metrics.md" "644" >> "$OUTPUT"
@@ -147,49 +150,44 @@ info "Generating manifest..."
 .syskit/scripts/manifest.sh
 
 # Create/update CLAUDE.md to reference syskit
+SYSKIT_MD=".syskit/templates/CLAUDE_SYSKIT.md"
+
 if [ -f "CLAUDE.md" ]; then
-    if ! grep -q "syskit" "CLAUDE.md"; then
-        info "Adding syskit reference to CLAUDE.md"
-        cat >> CLAUDE.md << 'CLAUDE_APPEND_EOF'
-
-## syskit
-
-This project uses syskit for specification-driven development.
-
-**Before any syskit workflow, read `.syskit/AGENTS.md` for full instructions.**
-
-Quick reference:
-- `/syskit-guide` — Interactive onboarding (start here if new)
-- `/syskit-impact <change>` — Analyze impact of a proposed change
-- `/syskit-propose` — Propose spec modifications based on impact analysis
-- `/syskit-plan` — Create implementation task breakdown
-- `/syskit-implement` — Execute planned tasks
-
-Specifications live in `doc/` (requirements, interfaces, design).
-Working documents live in `.syskit/` (analysis, tasks, manifest).
-CLAUDE_APPEND_EOF
+    if grep -q "<!-- syskit-start -->" "CLAUDE.md"; then
+        info "Updating syskit section in CLAUDE.md"
+        awk -v sf="$SYSKIT_MD" '
+            /<!-- syskit-start -->/ {
+                skip=1
+                print "<!-- syskit-start -->"
+                while ((getline line < sf) > 0) print line
+                close(sf)
+                print "<!-- syskit-end -->"
+                next
+            }
+            /<!-- syskit-end -->/ { skip=0; next }
+            !skip
+        ' CLAUDE.md > CLAUDE.md.tmp && mv CLAUDE.md.tmp CLAUDE.md
+    elif ! grep -q "## syskit" "CLAUDE.md"; then
+        info "Adding syskit section to CLAUDE.md"
+        {
+            echo ""
+            echo "<!-- syskit-start -->"
+            cat "$SYSKIT_MD"
+            echo "<!-- syskit-end -->"
+        } >> CLAUDE.md
+    else
+        warn "CLAUDE.md has a syskit section without update markers."
+        warn "To enable automatic updates, wrap it with <!-- syskit-start --> and <!-- syskit-end -->"
     fi
 else
     info "Creating CLAUDE.md"
-    cat > CLAUDE.md << 'CLAUDE_EOF'
-# Project Instructions
-
-## syskit
-
-This project uses syskit for specification-driven development.
-
-**Before any syskit workflow, read `.syskit/AGENTS.md` for full instructions.**
-
-Quick reference:
-- `/syskit-guide` — Interactive onboarding (start here if new)
-- `/syskit-impact <change>` — Analyze impact of a proposed change
-- `/syskit-propose` — Propose spec modifications based on impact analysis
-- `/syskit-plan` — Create implementation task breakdown
-- `/syskit-implement` — Execute planned tasks
-
-Specifications live in `doc/` (requirements, interfaces, design).
-Working documents live in `.syskit/` (analysis, tasks, manifest).
-CLAUDE_EOF
+    {
+        echo "# Project Instructions"
+        echo ""
+        echo "<!-- syskit-start -->"
+        cat "$SYSKIT_MD"
+        echo "<!-- syskit-end -->"
+    } > CLAUDE.md
 fi
 
 info ""

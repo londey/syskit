@@ -1261,6 +1261,96 @@ echo "ID: $ID"
 __SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/new-unit.sh"
 
+# --- .syskit/scripts/toc-update.sh ---
+info "Creating .syskit/scripts/toc-update.sh"
+cat > ".syskit/scripts/toc-update.sh" << '__SYSKIT_TEMPLATE_END__'
+#!/bin/bash
+# Update the Table of Contents in each doc/*/README.md
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+cd "$PROJECT_ROOT"
+
+# Update TOC in a single README.md
+# Scans sibling .md files, extracts H1 headings, writes a linked list
+update_toc() {
+    local dir=$1
+    local readme="$dir/README.md"
+
+    if [ ! -f "$readme" ]; then
+        return
+    fi
+
+    # Check for TOC markers
+    if ! grep -q '<!-- TOC-START -->' "$readme"; then
+        return
+    fi
+
+    # Collect entries: "filename|heading"
+    local entries=""
+    for f in $(find "$dir" -maxdepth 1 -name "*.md" -type f | LC_COLLATE=C sort); do
+        local base=$(basename "$f")
+
+        # Skip README itself and 000 templates
+        case "$base" in
+            README.md|*_000_template.md) continue ;;
+        esac
+
+        # Extract H1 heading (first line starting with "# ")
+        local heading=$(grep -m1 '^# ' "$f" | sed 's/^# //')
+        if [ -z "$heading" ]; then
+            heading="$base"
+        fi
+
+        entries="${entries}${base}|${heading}\n"
+    done
+
+    # Build replacement block
+    local toc_block=""
+    if [ -z "$entries" ]; then
+        toc_block="*No documents yet.*"
+    else
+        while IFS='|' read -r base heading; do
+            [ -z "$base" ] && continue
+            toc_block="${toc_block}- [${heading}](${base})\n"
+        done < <(printf "$entries")
+    fi
+
+    # Replace content between TOC markers
+    # Strategy: print before START, print new TOC, skip until END, print after END
+    local tmp="${readme}.tmp"
+    awk -v toc="$toc_block" '
+    /<!-- TOC-START -->/ {
+        print
+        # Print the toc content using printf-style interpretation
+        n = split(toc, lines, "\\n")
+        for (i = 1; i <= n; i++) {
+            if (lines[i] != "") print lines[i]
+        }
+        skip = 1
+        next
+    }
+    /<!-- TOC-END -->/ {
+        skip = 0
+        print
+        next
+    }
+    !skip { print }
+    ' "$readme" > "$tmp"
+
+    mv "$tmp" "$readme"
+}
+
+update_toc "doc/requirements"
+update_toc "doc/interfaces"
+update_toc "doc/design"
+
+echo "TOC updated in doc/*/README.md"
+__SYSKIT_TEMPLATE_END__
+chmod +x ".syskit/scripts/toc-update.sh"
+
 # --- .syskit/scripts/trace-sync.sh ---
 info "Creating .syskit/scripts/trace-sync.sh"
 cat > ".syskit/scripts/trace-sync.sh" << '__SYSKIT_TEMPLATE_END__'
@@ -2741,6 +2831,103 @@ When adding a new decision, copy this template:
 <!-- Add decisions below, newest first -->
 __SYSKIT_TEMPLATE_END__
 
+# --- .syskit/templates/doc/requirements/README.md ---
+info "Creating .syskit/templates/doc/requirements/README.md"
+cat > ".syskit/templates/doc/requirements/README.md" << '__SYSKIT_TEMPLATE_END__'
+# Requirements
+
+This directory contains the system requirements specification — the authoritative record of **what** the system must do.
+
+## Purpose
+
+Each requirement document defines a single, testable system behavior using the condition/response pattern:
+
+> **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
+
+Requirements are traceable: each is allocated to design units (`UNIT-NNN`) and references interfaces (`INT-NNN`). Together they form a complete, verifiable description of system capability.
+
+## Conventions
+
+- **Naming:** `req_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
+- **Create new:** `.syskit/scripts/new-req.sh <name>`
+- **Cross-references:** Use `REQ-NNN` identifiers (derived from filename)
+- **Hierarchy:** Use the `Parent Requirements` field for decomposition
+
+## Framework Documents
+
+- **quality_metrics.md** — Quality attributes, targets, and measurement methods
+- **states_and_modes.md** — System operational states, modes, and transitions
+
+## Table of Contents
+
+<!-- TOC-START -->
+*Run `.syskit/scripts/toc-update.sh` to generate.*
+<!-- TOC-END -->
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/templates/doc/interfaces/README.md ---
+info "Creating .syskit/templates/doc/interfaces/README.md"
+cat > ".syskit/templates/doc/interfaces/README.md" << '__SYSKIT_TEMPLATE_END__'
+# Interfaces
+
+This directory contains the interface specifications — the authoritative record of **contracts** between components and with external systems.
+
+## Purpose
+
+Each interface document defines a precise contract: data formats, protocols, APIs, or signal definitions that components agree on. Interfaces are the bridge between requirements (what) and design (how), ensuring components can be developed and tested independently.
+
+Interface types:
+
+- **Internal** — Defined by this project (register maps, packet formats, internal APIs)
+- **External Standard** — Defined by an external spec (PNG, SPI, USB)
+- **External Service** — Defined by an external service (REST API, cloud endpoint)
+
+## Conventions
+
+- **Naming:** `int_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
+- **Create new:** `.syskit/scripts/new-int.sh <name>`
+- **Cross-references:** Use `INT-NNN` identifiers (derived from filename)
+- **Parties:** Each interface has a Provider and one or more Consumers
+
+## Table of Contents
+
+<!-- TOC-START -->
+*Run `.syskit/scripts/toc-update.sh` to generate.*
+<!-- TOC-END -->
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/templates/doc/design/README.md ---
+info "Creating .syskit/templates/doc/design/README.md"
+cat > ".syskit/templates/doc/design/README.md" << '__SYSKIT_TEMPLATE_END__'
+# Design
+
+This directory contains the design specification — the authoritative record of **how** the system accomplishes its requirements.
+
+## Purpose
+
+Each design unit document describes a cohesive piece of the system: its purpose, the requirements it satisfies, the interfaces it provides and consumes, and its internal behavior. Design units map directly to implementation — each links to source files and test files, enabling full traceability from requirement through design to code.
+
+A design unit might be a hardware module, a source file, a library, or a logical grouping of related code.
+
+## Conventions
+
+- **Naming:** `unit_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
+- **Create new:** `.syskit/scripts/new-unit.sh <name>`
+- **Cross-references:** Use `UNIT-NNN` identifiers (derived from filename)
+- **Traceability:** Source files link back via `Spec-ref` comments; use `impl-stamp.sh` to keep hashes current
+
+## Framework Documents
+
+- **concept_of_execution.md** — System runtime behavior, startup, data flow, and event handling
+- **design_decisions.md** — Architecture Decision Records (ADR format)
+
+## Table of Contents
+
+<!-- TOC-START -->
+*Run `.syskit/scripts/toc-update.sh` to generate.*
+<!-- TOC-END -->
+__SYSKIT_TEMPLATE_END__
+
 # Copy-templates: always overwrite
 info "Updating copy-templates in doc/..."
 cp .syskit/templates/doc/requirements/req_000_template.md doc/requirements/req_000_template.md
@@ -2752,7 +2939,10 @@ for tmpl in \
     "doc/requirements/quality_metrics.md" \
     "doc/requirements/states_and_modes.md" \
     "doc/design/concept_of_execution.md" \
-    "doc/design/design_decisions.md"
+    "doc/design/design_decisions.md" \
+    "doc/requirements/README.md" \
+    "doc/interfaces/README.md" \
+    "doc/design/README.md"
 do
     if [ ! -f "$tmpl" ]; then
         info "Creating $tmpl"
@@ -2761,6 +2951,10 @@ do
         info "Skipping $tmpl (already exists)"
     fi
 done
+
+# Update table of contents in README files
+info "Updating doc README table of contents..."
+.syskit/scripts/toc-update.sh
 
 # Generate initial manifest
 info "Generating manifest..."

@@ -1,0 +1,27 @@
+# Design
+
+This directory contains the design specification — the authoritative record of **how** the system accomplishes its requirements.
+
+## Purpose
+
+Each design unit document describes a cohesive piece of the system: its purpose, the requirements it satisfies, the interfaces it provides and consumes, and its internal behavior. Design units map directly to implementation — each links to source files and test files, enabling full traceability from requirement through design to code.
+
+A design unit might be a hardware module, a source file, a library, or a logical grouping of related code.
+
+## Conventions
+
+- **Naming:** `unit_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
+- **Create new:** `.syskit/scripts/new-unit.sh <name>`
+- **Cross-references:** Use `UNIT-NNN` identifiers (derived from filename)
+- **Traceability:** Source files link back via `Spec-ref` comments; use `impl-stamp.sh` to keep hashes current
+
+## Framework Documents
+
+- **concept_of_execution.md** — System runtime behavior, startup, data flow, and event handling
+- **design_decisions.md** — Architecture Decision Records (ADR format)
+
+## Table of Contents
+
+<!-- TOC-START -->
+*Run `.syskit/scripts/toc-update.sh` to generate.*
+<!-- TOC-END -->

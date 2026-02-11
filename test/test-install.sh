@@ -75,6 +75,7 @@ for file in \
     ".syskit/scripts/trace-sync.sh" \
     ".syskit/scripts/impl-check.sh" \
     ".syskit/scripts/impl-stamp.sh" \
+    ".syskit/scripts/toc-update.sh" \
     ".claude/commands/syskit-impact.md" \
     ".claude/commands/syskit-propose.md" \
     ".claude/commands/syskit-plan.md" \
@@ -87,6 +88,12 @@ for file in \
     "doc/design/design_decisions.md" \
     "doc/design/concept_of_execution.md" \
     "doc/design/unit_000_template.md" \
+    "doc/requirements/README.md" \
+    "doc/interfaces/README.md" \
+    "doc/design/README.md" \
+    ".syskit/templates/doc/requirements/README.md" \
+    ".syskit/templates/doc/interfaces/README.md" \
+    ".syskit/templates/doc/design/README.md" \
     ".syskit/templates/doc/requirements/req_000_template.md" \
     ".syskit/templates/doc/requirements/quality_metrics.md" \
     ".syskit/templates/doc/requirements/states_and_modes.md" \
@@ -115,7 +122,8 @@ for script in \
     ".syskit/scripts/new-unit.sh" \
     ".syskit/scripts/trace-sync.sh" \
     ".syskit/scripts/impl-check.sh" \
-    ".syskit/scripts/impl-stamp.sh"
+    ".syskit/scripts/impl-stamp.sh" \
+    ".syskit/scripts/toc-update.sh"
 do
     if [ -x "$script" ]; then
         pass "Executable: $script"
@@ -204,6 +212,36 @@ else
 fi
 
 rm -rf .syskit/test-analysis
+
+echo ""
+echo "Testing toc-update..."
+
+# TOC should include newly created documents
+.syskit/scripts/toc-update.sh > /dev/null 2>&1
+if grep -q "req_001_test_requirement.md" doc/requirements/README.md; then
+    pass "toc-update.sh adds new requirement to TOC"
+else
+    fail "toc-update.sh did not add requirement to TOC"
+fi
+
+if grep -q "int_001_test_interface.md" doc/interfaces/README.md; then
+    pass "toc-update.sh adds new interface to TOC"
+else
+    fail "toc-update.sh did not add interface to TOC"
+fi
+
+if grep -q "unit_001_test_unit.md" doc/design/README.md; then
+    pass "toc-update.sh adds new unit to TOC"
+else
+    fail "toc-update.sh did not add unit to TOC"
+fi
+
+# TOC should not include template files
+if grep -q "req_000_template.md" doc/requirements/README.md; then
+    fail "toc-update.sh incorrectly included template in TOC"
+else
+    pass "toc-update.sh excludes template files from TOC"
+fi
 
 echo ""
 echo "Testing trace-sync..."
@@ -328,6 +366,8 @@ echo "Testing template overwrite behavior..."
 echo "user modification" > doc/requirements/req_000_template.md
 # Modify a framework doc (should NOT be overwritten on re-install)
 echo "user customization" > doc/requirements/quality_metrics.md
+# Modify a README (should NOT be overwritten on re-install)
+echo "user readme edit" > doc/requirements/README.md
 
 # Run installer again
 if bash "$INSTALLER" > /dev/null 2>&1; then
@@ -348,6 +388,13 @@ if grep -q "user customization" doc/requirements/quality_metrics.md; then
     pass "Framework doc preserved user customization"
 else
     fail "Framework doc was overwritten on re-install"
+fi
+
+# README should keep user content
+if grep -q "user readme edit" doc/requirements/README.md; then
+    pass "README preserved user customization"
+else
+    fail "README was overwritten on re-install"
 fi
 
 # .syskit/templates/ should always have latest clean version

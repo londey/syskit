@@ -101,6 +101,9 @@ embed_file "$TEMPLATES_DIR/doc/interfaces/int_000_template.md" ".syskit/template
 embed_file "$TEMPLATES_DIR/doc/design/unit_000_template.md" ".syskit/templates/doc/design/unit_000_template.md" "644" >> "$OUTPUT"
 embed_file "$TEMPLATES_DIR/doc/design/concept_of_execution.md" ".syskit/templates/doc/design/concept_of_execution.md" "644" >> "$OUTPUT"
 embed_file "$TEMPLATES_DIR/doc/design/design_decisions.md" ".syskit/templates/doc/design/design_decisions.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/requirements/README.md" ".syskit/templates/doc/requirements/README.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/interfaces/README.md" ".syskit/templates/doc/interfaces/README.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/design/README.md" ".syskit/templates/doc/design/README.md" "644" >> "$OUTPUT"
 
 # Copy templates from .syskit/templates/ to doc/
 # Copy-templates: always overwrite (users copy these, not edit originals)
@@ -118,7 +121,10 @@ for tmpl in \
     "doc/requirements/quality_metrics.md" \
     "doc/requirements/states_and_modes.md" \
     "doc/design/concept_of_execution.md" \
-    "doc/design/design_decisions.md"
+    "doc/design/design_decisions.md" \
+    "doc/requirements/README.md" \
+    "doc/interfaces/README.md" \
+    "doc/design/README.md"
 do
     if [ ! -f "$tmpl" ]; then
         info "Creating $tmpl"
@@ -131,6 +137,10 @@ COPY_TEMPLATES
 
 # Add manifest generation and completion
 cat >> "$OUTPUT" << 'SCRIPT_FOOTER'
+
+# Update table of contents in README files
+info "Updating doc README table of contents..."
+.syskit/scripts/toc-update.sh
 
 # Generate initial manifest
 info "Generating manifest..."

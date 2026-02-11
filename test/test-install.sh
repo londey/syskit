@@ -73,6 +73,8 @@ for file in \
     ".syskit/scripts/new-int.sh" \
     ".syskit/scripts/new-unit.sh" \
     ".syskit/scripts/trace-sync.sh" \
+    ".syskit/scripts/impl-check.sh" \
+    ".syskit/scripts/impl-stamp.sh" \
     ".claude/commands/syskit-impact.md" \
     ".claude/commands/syskit-propose.md" \
     ".claude/commands/syskit-plan.md" \
@@ -111,7 +113,9 @@ for script in \
     ".syskit/scripts/new-req.sh" \
     ".syskit/scripts/new-int.sh" \
     ".syskit/scripts/new-unit.sh" \
-    ".syskit/scripts/trace-sync.sh"
+    ".syskit/scripts/trace-sync.sh" \
+    ".syskit/scripts/impl-check.sh" \
+    ".syskit/scripts/impl-stamp.sh"
 do
     if [ -x "$script" ]; then
         pass "Executable: $script"
@@ -243,6 +247,58 @@ if .syskit/scripts/new-req.sh --parent REQ-001 child_requirement > /dev/null; th
     fi
 else
     fail "new-req.sh --parent failed"
+fi
+
+echo ""
+echo "Testing impl-check and impl-stamp..."
+
+# Set up: edit unit_001's ## Implementation section to list a source file
+sed -i 's/- `<filepath>`: <description>/- `src\/test_unit.rs`: Main implementation/' doc/design/unit_001_test_unit.md
+
+# Compute the current hash of the unit file
+if command -v sha256sum &> /dev/null; then
+    UNIT1_HASH=$(sha256sum doc/design/unit_001_test_unit.md | cut -c1-16)
+else
+    UNIT1_HASH=$(shasum -a 256 doc/design/unit_001_test_unit.md | cut -c1-16)
+fi
+
+# Create a source file with a matching Spec-ref
+mkdir -p src
+cat > src/test_unit.rs << SRCEOF
+// Spec-ref: unit_001_test_unit.md \`${UNIT1_HASH}\` $(date +%Y-%m-%d)
+fn main() {}
+SRCEOF
+git add src/test_unit.rs
+
+# impl-check should report current
+if .syskit/scripts/impl-check.sh UNIT-001 2>/dev/null | grep -q "current"; then
+    pass "impl-check.sh reports current for matching hash"
+else
+    fail "impl-check.sh did not report current"
+fi
+
+# Modify the unit file to make hash stale
+echo "<!-- additional design note -->" >> doc/design/unit_001_test_unit.md
+
+# impl-check should report stale
+if .syskit/scripts/impl-check.sh UNIT-001 2>/dev/null | grep -q "stale"; then
+    pass "impl-check.sh detects stale after unit file change"
+else
+    fail "impl-check.sh did not detect stale"
+fi
+
+# impl-stamp should update the hash
+if .syskit/scripts/impl-stamp.sh UNIT-001 2>/dev/null | grep -q "updated"; then
+    pass "impl-stamp.sh updates Spec-ref hash"
+else
+    fail "impl-stamp.sh did not update hash"
+fi
+
+# impl-check should now report current again
+if .syskit/scripts/impl-check.sh UNIT-001 2>/dev/null | grep -q "current"; then
+    pass "impl-check.sh reports current after stamp"
+else
+    fail "impl-check.sh still reports stale after stamp"
 fi
 
 echo ""

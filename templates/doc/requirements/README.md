@@ -13,9 +13,10 @@ Requirements are traceable: each is allocated to design units (`UNIT-NNN`) and r
 ## Conventions
 
 - **Naming:** `req_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
-- **Create new:** `.syskit/scripts/new-req.sh <name>`
-- **Cross-references:** Use `REQ-NNN` identifiers (derived from filename)
-- **Hierarchy:** Use the `Parent Requirements` field for decomposition
+- **Child requirements:** `req_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `req_004.01_voltage_levels.md`)
+- **Create new:** `.syskit/scripts/new-req.sh <name>` or `.syskit/scripts/new-req.sh --parent REQ-NNN <name>`
+- **Cross-references:** Use `REQ-NNN` or `REQ-NNN.NN` identifiers (derived from filename)
+- **Hierarchy:** Parent relationship is visible in the ID; `Parent Requirements` field provides explicit back-reference
 
 ## Framework Documents
 

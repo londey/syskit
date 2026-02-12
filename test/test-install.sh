@@ -277,12 +277,16 @@ fi
 echo ""
 echo "Testing new-req.sh --parent flag..."
 
-# Create a child requirement with --parent
+# Create a child requirement with --parent (hierarchical numbering: REQ-001.01)
 if .syskit/scripts/new-req.sh --parent REQ-001 child_requirement > /dev/null; then
-    if grep -q "REQ-001" doc/requirements/req_002_child_requirement.md; then
-        pass "new-req.sh --parent sets parent reference"
+    if [ -f doc/requirements/req_001.01_child_requirement.md ]; then
+        if grep -q "REQ-001" doc/requirements/req_001.01_child_requirement.md; then
+            pass "new-req.sh --parent creates hierarchical child (REQ-001.01)"
+        else
+            fail "new-req.sh --parent did not set parent reference"
+        fi
     else
-        fail "new-req.sh --parent did not set parent reference"
+        fail "new-req.sh --parent did not create hierarchical filename (expected req_001.01_child_requirement.md)"
     fi
 else
     fail "new-req.sh --parent failed"

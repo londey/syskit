@@ -1332,8 +1332,21 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cd "$PROJECT_ROOT"
 
+# Explicit ordering for non-numbered framework files per directory.
+# Files listed here appear first in the TOC, in this order.
+# Any non-numbered file NOT listed gets appended alphabetically after these.
+framework_order() {
+    case "$1" in
+        *requirements) echo "states_and_modes.md quality_metrics.md" ;;
+        *design)       echo "design_decisions.md concept_of_execution.md" ;;
+        *)             echo "" ;;
+    esac
+}
+
 # Update TOC in a single README.md
 # Scans sibling .md files, extracts H1 headings, writes a linked list
+# Ordering: explicitly ordered framework files, then remaining framework
+# files alphabetically, then numbered spec files alphabetically.
 update_toc() {
     local dir=$1
     local readme="$dir/README.md"
@@ -1347,8 +1360,13 @@ update_toc() {
         return
     fi
 
-    # Collect entries: "filename|heading"
-    local entries=""
+    local explicit_order
+    explicit_order=$(framework_order "$dir")
+
+    # Collect entries into two groups: framework (non-numbered) and numbered
+    local numbered_entries=""
+    local framework_entries=""
+
     for f in $(find "$dir" -maxdepth 1 -name "*.md" -type f | LC_COLLATE=C sort); do
         local base=$(basename "$f")
 
@@ -1363,18 +1381,59 @@ update_toc() {
             heading="$base"
         fi
 
-        entries="${entries}${base}|${heading}\n"
+        local entry="${base}|${heading}\n"
+
+        # Classify: numbered spec files vs framework files
+        case "$base" in
+            req_[0-9][0-9][0-9]*.md | unit_[0-9][0-9][0-9]*.md | int_[0-9][0-9][0-9]*.md)
+                numbered_entries="${numbered_entries}${entry}"
+                ;;
+            *)
+                framework_entries="${framework_entries}${entry}"
+                ;;
+        esac
     done
+
+    # Order framework entries: explicit order first, then alphabetical remainder
+    local ordered_framework=""
+
+    for explicit_file in $explicit_order; do
+        local match
+        match=$(printf "$framework_entries" | grep "^${explicit_file}|" || true)
+        if [ -n "$match" ]; then
+            ordered_framework="${ordered_framework}${match}\n"
+        fi
+    done
+
+    # Append any framework files not in the explicit order list
+    if [ -n "$framework_entries" ]; then
+        while IFS='|' read -r base heading; do
+            [ -z "$base" ] && continue
+            local already_listed=false
+            for explicit_file in $explicit_order; do
+                if [ "$base" = "$explicit_file" ]; then
+                    already_listed=true
+                    break
+                fi
+            done
+            if [ "$already_listed" = false ]; then
+                ordered_framework="${ordered_framework}${base}|${heading}\n"
+            fi
+        done < <(printf "$framework_entries")
+    fi
+
+    # Combine: framework first, then numbered
+    local all_entries="${ordered_framework}${numbered_entries}"
 
     # Build replacement block
     local toc_block=""
-    if [ -z "$entries" ]; then
+    if [ -z "$all_entries" ]; then
         toc_block="*No documents yet.*"
     else
         while IFS='|' read -r base heading; do
             [ -z "$base" ] && continue
             toc_block="${toc_block}- [${heading}](${base})\n"
-        done < <(printf "$entries")
+        done < <(printf "$all_entries")
     fi
 
     # Replace content between TOC markers

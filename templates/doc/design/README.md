@@ -1,6 +1,12 @@
 # Design
 
+*Software Design Description (SDD) for <system name>*
+
 This directory contains the design specification — the authoritative record of **how** the system accomplishes its requirements.
+
+## System Overview
+
+<Brief description of the system: what it is, what it does, and its operational context.>
 
 ## Purpose
 

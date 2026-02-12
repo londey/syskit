@@ -1,6 +1,12 @@
 # Requirements
 
+*Software Requirements Specification (SRS) for <system name>*
+
 This directory contains the system requirements specification — the authoritative record of **what** the system must do.
+
+## System Overview
+
+<Brief description of the system: what it is, what it does, and its operational context.>
 
 ## Purpose
 

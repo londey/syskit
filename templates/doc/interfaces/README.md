@@ -1,6 +1,12 @@
 # Interfaces
 
+*Interface Design Description (IDD) for <system name>*
+
 This directory contains the interface specifications — the authoritative record of **contracts** between components and with external systems.
+
+## System Overview
+
+<Brief description of the system: what it is, what it does, and its operational context.>
 
 ## Purpose
 

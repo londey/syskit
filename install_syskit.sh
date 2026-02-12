@@ -3013,7 +3013,13 @@ info "Creating .syskit/templates/doc/requirements/README.md"
 cat > ".syskit/templates/doc/requirements/README.md" << '__SYSKIT_TEMPLATE_END__'
 # Requirements
 
+*Software Requirements Specification (SRS) for <system name>*
+
 This directory contains the system requirements specification — the authoritative record of **what** the system must do.
+
+## System Overview
+
+<Brief description of the system: what it is, what it does, and its operational context.>
 
 ## Purpose
 
@@ -3048,7 +3054,13 @@ info "Creating .syskit/templates/doc/interfaces/README.md"
 cat > ".syskit/templates/doc/interfaces/README.md" << '__SYSKIT_TEMPLATE_END__'
 # Interfaces
 
+*Interface Design Description (IDD) for <system name>*
+
 This directory contains the interface specifications — the authoritative record of **contracts** between components and with external systems.
+
+## System Overview
+
+<Brief description of the system: what it is, what it does, and its operational context.>
 
 ## Purpose
 
@@ -3079,7 +3091,13 @@ info "Creating .syskit/templates/doc/design/README.md"
 cat > ".syskit/templates/doc/design/README.md" << '__SYSKIT_TEMPLATE_END__'
 # Design
 
+*Software Design Description (SDD) for <system name>*
+
 This directory contains the design specification — the authoritative record of **how** the system accomplishes its requirements.
+
+## System Overview
+
+<Brief description of the system: what it is, what it does, and its operational context.>
 
 ## Purpose
 

@@ -143,11 +143,26 @@ When creating new documents:
 - Use `_` separator, lowercase, no spaces in names
 - Examples: `req_001_system_overview.md`, `int_003_register_map.md`
 
-Or use the helper scripts:
+### Hierarchical Requirement Numbering
+
+Child requirements use dot-notation to show their parent relationship:
+
+- Top-level: `req_004_motor_control.md` → `REQ-004`
+- Child: `req_004.01_voltage_levels.md` → `REQ-004.01`
+- Grandchild: `req_004.01.03_overvoltage_protection.md` → `REQ-004.01.03`
+
+Top-level IDs use 3-digit padding (`NNN`). Each child level uses 2-digit padding (`.NN`).
+
+This numbering makes the requirement hierarchy visible from the ID alone and groups
+sibling requirements in directory listings.
+
+### Helper Scripts
 
 ```bash
-.syskit/scripts/new-req.sh <name>
-.syskit/scripts/new-int.sh <name>  
+.syskit/scripts/new-req.sh <name>                        # top-level requirement
+.syskit/scripts/new-req.sh --parent REQ-004 <name>       # child of REQ-004
+.syskit/scripts/new-req.sh --parent REQ-004.01 <name>    # grandchild
+.syskit/scripts/new-int.sh <name>
 .syskit/scripts/new-unit.sh <name>
 ```
 
@@ -155,14 +170,17 @@ Or use the helper scripts:
 
 Use consistent identifiers when referencing between documents:
 
-- `REQ-001` — Requirement 001
+- `REQ-001` — Requirement 001 (top-level)
+- `REQ-001.03` — Requirement 001.03 (child of REQ-001)
 - `INT-005` — Interface 005
 - `UNIT-012` — Design unit 012
 
-These identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`
+These identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`
 
-For hierarchical requirements, use the `Parent Requirements` field in each child
-requirement file rather than sub-requirement IDs. Each requirement gets its own file.
+Requirements use hierarchical numbering to make decomposition visible. The parent
+relationship is encoded in the ID itself — `REQ-004.15` is a child of `REQ-004`.
+Each requirement still gets its own file, and the `Parent Requirements` field provides
+an explicit back-reference for traceability verification.
 
 ### Cross-Reference Sync
 

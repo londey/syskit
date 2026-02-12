@@ -183,11 +183,26 @@ When creating new documents:
 - Use `_` separator, lowercase, no spaces in names
 - Examples: `req_001_system_overview.md`, `int_003_register_map.md`
 
-Or use the helper scripts:
+### Hierarchical Requirement Numbering
+
+Child requirements use dot-notation to show their parent relationship:
+
+- Top-level: `req_004_motor_control.md` → `REQ-004`
+- Child: `req_004.01_voltage_levels.md` → `REQ-004.01`
+- Grandchild: `req_004.01.03_overvoltage_protection.md` → `REQ-004.01.03`
+
+Top-level IDs use 3-digit padding (`NNN`). Each child level uses 2-digit padding (`.NN`).
+
+This numbering makes the requirement hierarchy visible from the ID alone and groups
+sibling requirements in directory listings.
+
+### Helper Scripts
 
 ```bash
-.syskit/scripts/new-req.sh <name>
-.syskit/scripts/new-int.sh <name>  
+.syskit/scripts/new-req.sh <name>                        # top-level requirement
+.syskit/scripts/new-req.sh --parent REQ-004 <name>       # child of REQ-004
+.syskit/scripts/new-req.sh --parent REQ-004.01 <name>    # grandchild
+.syskit/scripts/new-int.sh <name>
 .syskit/scripts/new-unit.sh <name>
 ```
 
@@ -195,14 +210,17 @@ Or use the helper scripts:
 
 Use consistent identifiers when referencing between documents:
 
-- `REQ-001` — Requirement 001
+- `REQ-001` — Requirement 001 (top-level)
+- `REQ-001.03` — Requirement 001.03 (child of REQ-001)
 - `INT-005` — Interface 005
 - `UNIT-012` — Design unit 012
 
-These identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`
+These identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`
 
-For hierarchical requirements, use the `Parent Requirements` field in each child
-requirement file rather than sub-requirement IDs. Each requirement gets its own file.
+Requirements use hierarchical numbering to make decomposition visible. The parent
+relationship is encoded in the ID itself — `REQ-004.15` is a child of `REQ-004`.
+Each requirement still gets its own file, and the `Parent Requirements` field provides
+an explicit back-reference for traceability verification.
 
 ### Cross-Reference Sync
 
@@ -1071,9 +1089,10 @@ fi
 NAME="${1:-}"
 
 if [ -z "$NAME" ]; then
-    echo "Usage: new-req.sh [--parent REQ-NNN] <requirement_name>"
+    echo "Usage: new-req.sh [--parent REQ-NNN[.NN...]] <requirement_name>"
     echo "Example: new-req.sh spi_interface"
     echo "Example: new-req.sh --parent REQ-001 spi_voltage_levels"
+    echo "Example: new-req.sh --parent REQ-001.03 spi_clock_timing"
     exit 1
 fi
 
@@ -1082,27 +1101,67 @@ NAME=$(echo "$NAME" | tr '[:upper:]' '[:lower:]' | tr ' -' '_')
 
 mkdir -p "$REQ_DIR"
 
-# Find next available number
-NEXT_NUM=1
-for f in "$REQ_DIR"/req_[0-9][0-9][0-9]_*.md; do
-    if [ -f "$f" ]; then
-        NUM=$(basename "$f" | sed 's/req_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
-        NUM=${NUM:-0}  # Default to 0 if empty
-        if [ "$NUM" -ge "$NEXT_NUM" ]; then
-            NEXT_NUM=$((NUM + 1))
-        fi
-    fi
-done
+if [ -n "$PARENT" ]; then
+    # ─── Child requirement: REQ-NNN.NN under parent ──────────────
 
-NUM_PADDED=$(printf "%03d" $NEXT_NUM)
-FILENAME="req_${NUM_PADDED}_${NAME}.md"
-FILEPATH="$REQ_DIR/$FILENAME"
-ID="REQ-${NUM_PADDED}"
+    # Extract numeric prefix from parent ID (e.g., REQ-004 → 004, REQ-004.01 → 004.01)
+    PARENT_NUM=$(echo "$PARENT" | sed 's/^REQ-//')
+
+    if ! [[ "$PARENT_NUM" =~ ^[0-9]{3}(\.[0-9]{2})*$ ]]; then
+        echo "Error: invalid parent ID '$PARENT' (expected REQ-NNN or REQ-NNN.NN[.NN...])" >&2
+        exit 1
+    fi
+
+    # Warn if parent file doesn't exist
+    PARENT_FILE=$(find "$REQ_DIR" -maxdepth 1 -name "req_${PARENT_NUM}_*.md" -print -quit 2>/dev/null)
+    if [ -z "$PARENT_FILE" ]; then
+        echo "Warning: parent $PARENT has no matching file in $REQ_DIR" >&2
+    fi
+
+    # Find next available child number under this parent
+    NEXT_CHILD=1
+    for f in "$REQ_DIR"/req_${PARENT_NUM}.[0-9][0-9]_*.md; do
+        if [ -f "$f" ]; then
+            CHILD_NUM=$(basename "$f" | sed "s/req_${PARENT_NUM}\.\([0-9][0-9]\)_.*/\1/" | sed 's/^0*//')
+            CHILD_NUM=${CHILD_NUM:-0}
+            if [ "$CHILD_NUM" -ge "$NEXT_CHILD" ]; then
+                NEXT_CHILD=$((CHILD_NUM + 1))
+            fi
+        fi
+    done
+
+    CHILD_PADDED=$(printf "%02d" $NEXT_CHILD)
+    NUM_PART="${PARENT_NUM}.${CHILD_PADDED}"
+    FILENAME="req_${NUM_PART}_${NAME}.md"
+    FILEPATH="$REQ_DIR/$FILENAME"
+    ID="REQ-${NUM_PART}"
+else
+    # ─── Top-level requirement: REQ-NNN ──────────────────────────
+
+    NEXT_NUM=1
+    for f in "$REQ_DIR"/req_[0-9][0-9][0-9]_*.md; do
+        if [ -f "$f" ]; then
+            NUM=$(basename "$f" | sed 's/req_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
+            NUM=${NUM:-0}  # Default to 0 if empty
+            if [ "$NUM" -ge "$NEXT_NUM" ]; then
+                NEXT_NUM=$((NUM + 1))
+            fi
+        fi
+    done
+
+    NUM_PADDED=$(printf "%03d" $NEXT_NUM)
+    FILENAME="req_${NUM_PADDED}_${NAME}.md"
+    FILEPATH="$REQ_DIR/$FILENAME"
+    ID="REQ-${NUM_PADDED}"
+fi
 
 if [ -f "$FILEPATH" ]; then
     echo "Error: $FILEPATH already exists"
     exit 1
 fi
+
+# Set parent display: use provided parent, or "None" for top-level
+PARENT_DISPLAY="${PARENT:-None}"
 
 cat > "$FILEPATH" << EOF
 # $ID: $(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
@@ -1128,7 +1187,7 @@ When [condition/trigger], the system SHALL [observable behavior/response].
 
 ## Parent Requirements
 
-- ${PARENT:-None}
+- ${PARENT_DISPLAY}
 
 ## Allocated To
 
@@ -1382,9 +1441,13 @@ declare -A ID_TO_FILE    # ID -> full file path
 declare -A ID_TO_NAME    # ID -> human-readable name from H1
 declare -A ALL_IDS       # ID -> 1
 
+# Regex pattern for hierarchical requirement IDs: REQ-NNN or REQ-NNN.NN[.NN...]
+REQ_PAT='REQ-[0-9]{3}(\.[0-9]{2})*'
+
 build_id_map() {
     local tag dir prefix entry base num id name
-    for entry in "req:$REQ_DIR:REQ" "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT"; do
+    # Scan INT and UNIT (flat numbering)
+    for entry in "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT"; do
         IFS=':' read -r tag dir prefix <<< "$entry"
         [ -d "$dir" ] || continue
         for f in "$dir"/${tag}_[0-9][0-9][0-9]_*.md; do
@@ -1399,6 +1462,24 @@ build_id_map() {
             ID_TO_NAME["$id"]="$name"
         done
     done
+
+    # Scan REQ (supports hierarchical numbering: REQ-001, REQ-001.05, etc.)
+    if [ -d "$REQ_DIR" ]; then
+        for f in "$REQ_DIR"/req_*.md; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f")
+            [[ "$base" == *_000_template* ]] && continue
+            # Match req_NNN_name.md or req_NNN.NN[.NN...]_name.md
+            if [[ "$base" =~ ^req_([0-9]{3}(\.[0-9]{2})*)_.+\.md$ ]]; then
+                num="${BASH_REMATCH[1]}"
+                id="REQ-${num}"
+                ID_TO_FILE["$id"]="$f"
+                ALL_IDS["$id"]=1
+                name=$(head -1 "$f" | sed "s/^# *REQ-${num}: *//")
+                ID_TO_NAME["$id"]="$name"
+            fi
+        done
+    fi
 }
 
 # ─── Reference Storage ─────────────────────────────────────────────
@@ -1448,7 +1529,7 @@ parse_all() {
                 done
                 ;;
             UNIT-*)
-                for x in $(section_ids "$file" "## Implements Requirements" 2 "REQ-[0-9]{3}"); do
+                for x in $(section_ids "$file" "## Implements Requirements" 2 "$REQ_PAT"); do
                     add_ref unit_impl "$id" "$x"
                 done
                 for x in $(section_ids "$file" "### Provides" 3 "INT-[0-9]{3}"); do
@@ -1466,7 +1547,7 @@ parse_all() {
                 for x in $(echo "$parties" | grep -i 'Consumer' | grep -oE 'UNIT-[0-9]{3}' || true); do
                     add_ref int_cons "$id" "$x"
                 done
-                for x in $(section_ids "$file" "## Referenced By" 2 "REQ-[0-9]{3}"); do
+                for x in $(section_ids "$file" "## Referenced By" 2 "$REQ_PAT"); do
                     add_ref int_refby "$id" "$x"
                 done
                 ;;
@@ -1715,8 +1796,11 @@ Explain the project structure syskit has set up:
 
 Explain the naming convention:
 - `req_001_motor_control.md` → referenced as `REQ-001`
+- `req_001.01_torque_limit.md` → referenced as `REQ-001.01` (child of REQ-001)
 - `int_002_spi_bus.md` → referenced as `INT-002`
 - `unit_003_pwm_driver.md` → referenced as `UNIT-003`
+
+Explain that requirements support hierarchical numbering — child requirements use dot-notation (e.g., `REQ-001.03`) so the parent relationship is visible from the ID itself.
 
 Explain that these documents cross-reference each other to create a traceability web:
 - Requirements reference the interfaces they use and the design units that implement them
@@ -1826,7 +1910,7 @@ Provide a brief inventory of existing documents:
 
 Explain the conventions this project uses:
 
-1. **Naming:** `req_NNN_name.md` → `REQ-NNN`, `int_NNN_name.md` → `INT-NNN`, `unit_NNN_name.md` → `UNIT-NNN`
+1. **Naming:** `req_NNN_name.md` → `REQ-NNN` (child requirements: `req_NNN.NN_name.md` → `REQ-NNN.NN`), `int_NNN_name.md` → `INT-NNN`, `unit_NNN_name.md` → `UNIT-NNN`
 2. **Cross-references:** Documents link to each other using these IDs to create traceability:
    - Requirements → Interfaces they use, Design Units that implement them
    - Design Units → Requirements they satisfy, Interfaces they provide/consume
@@ -2427,6 +2511,7 @@ Format: **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
 
 - REQ-NNN (<parent requirement name>)
 - Or "None" if this is a top-level requirement
+- Child requirements use hierarchical IDs: REQ-NNN.NN (e.g., REQ-004.01 is a child of REQ-004)
 
 ## Allocated To
 
@@ -2882,9 +2967,10 @@ Requirements are traceable: each is allocated to design units (`UNIT-NNN`) and r
 ## Conventions
 
 - **Naming:** `req_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
-- **Create new:** `.syskit/scripts/new-req.sh <name>`
-- **Cross-references:** Use `REQ-NNN` identifiers (derived from filename)
-- **Hierarchy:** Use the `Parent Requirements` field for decomposition
+- **Child requirements:** `req_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `req_004.01_voltage_levels.md`)
+- **Create new:** `.syskit/scripts/new-req.sh <name>` or `.syskit/scripts/new-req.sh --parent REQ-NNN <name>`
+- **Cross-references:** Use `REQ-NNN` or `REQ-NNN.NN` identifiers (derived from filename)
+- **Hierarchy:** Parent relationship is visible in the ID; `Parent Requirements` field provides explicit back-reference
 
 ## Framework Documents
 

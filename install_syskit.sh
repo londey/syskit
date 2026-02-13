@@ -121,9 +121,9 @@ Design units describe HOW a piece of the system works.
 
 Always run impact analysis first:
 
-1. Load all documents from `doc/` into context
-2. Analyze which documents are affected by the proposed change
-3. Categorize as DIRECT, DEPENDENT, or INTERFACE impact
+1. Read the manifest to get the current document inventory
+2. Delegate document reading and analysis to a subagent (keeps full document text out of main context)
+3. Validate the subagent's categorization (DIRECT, INTERFACE, DEPENDENT, UNAFFECTED) against the manifest
 4. Check manifest for any documents modified since last analysis
 
 ### Proposing Changes
@@ -2019,36 +2019,120 @@ $ARGUMENTS.change
 
 ## Instructions
 
-### Step 1: Load All Documents
+### Step 1: Read Manifest
 
-Read all files in:
-- `doc/requirements/`
-- `doc/interfaces/`
-- `doc/design/`
+Read `.syskit/manifest.md` to get the current list of all specification documents and their hashes.
 
-Also read `.syskit/manifest.md` for current file hashes.
+Count the total number of specification documents listed (excluding any with `_000_template` in the name). You will use this count to validate the subagent's output.
 
-### Step 2: Analyze Each Document
+### Step 2: Delegate Document Analysis
 
-For each document, determine if it would be affected by the proposed change.
+Use the Task tool to launch a subagent that reads and analyzes all specification documents. This keeps the full document contents out of your context window.
 
-Categorize impacts as:
+Launch a `general-purpose` Task agent with this prompt (substitute the actual proposed change for PROPOSED_CHANGE below):
 
-- **DIRECT**: The document itself describes something being changed
-- **INTERFACE**: The document defines or uses an interface affected by the change
-- **DEPENDENT**: The document depends on something being changed (via REQ/INT/UNIT references)
-- **UNAFFECTED**: The document is not impacted (state why)
+> You are analyzing the impact of a proposed change on specification documents.
+>
+> ## Proposed Change
+>
+> PROPOSED_CHANGE
+>
+> ## Instructions
+>
+> 1. Read ALL markdown files in these directories:
+>    - `doc/requirements/`
+>    - `doc/interfaces/`
+>    - `doc/design/`
+>
+>    Skip any files with `_000_template` in the name.
+>
+> 2. For each document, extract:
+>    - The document ID (from the H1 heading, e.g., "REQ-001", "INT-003", "UNIT-007")
+>    - The document title (from the H1 heading after the ID)
+>    - All cross-references to other documents (REQ-NNN, INT-NNN, UNIT-NNN mentions)
+>    - A brief summary of what the document specifies (1-2 sentences)
+>
+> 3. Analyze each document against the proposed change. Categorize as:
+>    - **DIRECT**: The document itself describes something being changed
+>    - **INTERFACE**: The document defines or uses an interface affected by the change
+>    - **DEPENDENT**: The document depends on something being changed (via REQ/INT/UNIT references to a DIRECT or INTERFACE document)
+>    - **UNAFFECTED**: The document is not impacted
+>
+>    When tracing dependencies:
+>    - If a requirement is DIRECT, check which design units have it in "Implements Requirements" (those are DEPENDENT)
+>    - If a requirement is DIRECT, check which interfaces it lists under "Interfaces" (those are INTERFACE)
+>    - If an interface is DIRECT or INTERFACE, check which units list it under "Provides" or "Consumes" (those are DEPENDENT)
+>    - If a design unit is DIRECT, check which requirements it implements (review for DEPENDENT impact)
+>
+> 4. Return your analysis in EXACTLY this structured format:
+>
+> IMPACT_ANALYSIS_START
+>
+> ## Direct Impacts
+>
+> ### filename
+> - **ID:** REQ/INT/UNIT-NNN
+> - **Title:** document title
+> - **Impact:** what specifically is affected, 1-2 sentences
+> - **Action Required:** modify/review/no change
+> - **Key References:** cross-referenced IDs found in this document
+>
+> ## Interface Impacts
+>
+> ### filename
+> - **ID:** INT-NNN
+> - **Title:** document title
+> - **Impact:** what specifically is affected
+> - **Consumers:** UNIT-NNN that consume this interface
+> - **Providers:** UNIT-NNN that provide this interface
+> - **Action Required:** modify/review/no change
+>
+> ## Dependent Impacts
+>
+> ### filename
+> - **ID:** REQ/INT/UNIT-NNN
+> - **Title:** document title
+> - **Dependency:** what it depends on that is changing, with specific ID
+> - **Impact:** what specifically is affected
+> - **Action Required:** modify/review/no change
+>
+> ## Unaffected Documents
+>
+> | Document | ID | Reason Unaffected |
+> |----------|-----|-------------------|
+> | filename | ID | brief reason |
+>
+> ## Summary
+>
+> - **Total Documents:** n
+> - **Directly Affected:** n
+> - **Interface Affected:** n
+> - **Dependently Affected:** n
+> - **Unaffected:** n
+>
+> IMPACT_ANALYSIS_END
+>
+> If a category has no documents, include the heading with "None." underneath.
 
-### Step 3: Create Analysis Folder
+### Step 3: Validate Analysis
+
+After the subagent returns:
+
+1. Extract the structured analysis between the `IMPACT_ANALYSIS_START` and `IMPACT_ANALYSIS_END` markers
+2. Compare the "Total Documents" count from the subagent's summary against the count you computed from the manifest in Step 1
+3. If any documents are missing from the analysis, list them and warn the user
+4. If the subagent failed or returned incomplete results, tell the user and offer to fall back to direct analysis (read all documents yourself)
+
+### Step 4: Create Analysis Folder
 
 Create `.syskit/analysis/{{DATE}}_<change_name>/` with:
 
 1. `impact.md` — The impact report (format below)
 2. `snapshot.md` — Generated by running: `.syskit/scripts/manifest-snapshot.sh .syskit/analysis/{{DATE}}_<change_name>/`
 
-### Step 4: Output Impact Report
+### Step 5: Output Impact Report
 
-Use this format for `impact.md`:
+Use the subagent's structured analysis to write `impact.md` in this format:
 
 ```markdown
 # Impact Analysis: <brief change summary>
@@ -2105,11 +2189,15 @@ Status: Pending Review
 ...
 ```
 
-### Step 5: Ask for Confirmation
+### Step 6: Next Step
 
-After presenting the impact report, ask:
+After presenting the impact report, tell the user:
 
-"Shall I proceed with proposing specific modifications to the affected documents?"
+"Impact analysis complete. Results saved to `.syskit/analysis/<folder>/impact.md`.
+
+Next step: run `/syskit-propose` to propose specific changes to the affected documents.
+
+Tip: Start a new conversation before running the next command to free up context."
 __SYSKIT_TEMPLATE_END__
 
 # --- .claude/commands/syskit-implement.md ---
@@ -2213,7 +2301,14 @@ Add a completion summary:
 After completing the task:
 
 1. Check if there are more pending tasks
-2. If yes, ask: "Task <n> complete. Proceed to Task <next>?"
+2. If yes, tell the user:
+
+"Task <n> complete.
+
+Next: run `/syskit-implement` to continue with the next pending task.
+
+If context is getting large, start a new conversation — task progress is saved to disk."
+
 3. If no, report: "All tasks complete. Run `.syskit/scripts/manifest.sh` to update the manifest."
 
 Also remind to update any design documents if implementation details changed.
@@ -2247,20 +2342,79 @@ Otherwise:
 
 Verify the status shows changes were approved. If not, prompt user to run `/syskit-propose` first.
 
-### Step 2: Load Current Specifications
+### Step 2: Delegate Scope Extraction
 
-Load all affected documents from `doc/` to understand the current state.
+Use the Task tool to launch a subagent that reads the affected documents and design units to extract implementation scope. This keeps the full document contents out of your context window.
 
-Also load relevant design unit documents to understand implementation structure.
+Launch a `general-purpose` Task agent with this prompt (substitute the actual proposed_changes.md content for PROPOSED_CHANGES_CONTENT below):
 
-### Step 3: Identify Implementation Scope
+> You are extracting implementation scope from approved specification changes.
+>
+> ## Proposed Changes
+>
+> PROPOSED_CHANGES_CONTENT
+>
+> ## Instructions
+>
+> 1. Read each specification document referenced in the proposed changes above. Read them from the `doc/` directories.
+>
+> 2. Read all design unit documents (`doc/design/unit_*.md`) to understand implementation structure. Focus especially on:
+>    - The `## Implementation` section (lists source files)
+>    - The `## Implements Requirements` section (links to REQ-NNN)
+>    - The `## Provides` and `## Consumes` sections (links to INT-NNN)
+>
+> 3. For each specification change in the proposed changes, identify:
+>    - Which source files need modification (from design unit Implementation sections)
+>    - Which test files need modification or creation
+>    - Dependencies between changes (what must be done first)
+>    - How to verify the change was implemented correctly
+>
+> 4. Return your analysis in EXACTLY this structured format:
+>
+> SCOPE_ANALYSIS_START
+>
+> ## Implementation Scope
+>
+> ### Change: brief description of first change
+>
+> **Affected Specs:** REQ-NNN, INT-NNN, UNIT-NNN
+> **Source Files to Modify:**
+> - `path/to/file`: what needs to change
+>
+> **Source Files to Create:**
+> - `path/to/file`: purpose
+>
+> **Test Files:**
+> - `path/to/test`: what to test
+>
+> **Dependencies:** description of what must be done first, or "None"
+> **Verification:** how to verify this change
+>
+> ### Change: brief description of next change
+>
+> (repeat for each distinct change)
+>
+> ## Suggested Task Sequence
+>
+> | # | Task | Dependencies | Est. Effort |
+> |---|------|--------------|-------------|
+> | 1 | task name | None | small/medium/large |
+> | 2 | task name | Task 1 | effort |
+>
+> ## Risks and Considerations
+>
+> - risk or consideration
+>
+> SCOPE_ANALYSIS_END
 
-For each specification change, identify:
+### Step 3: Review Scope Analysis
 
-1. Which source files need modification
-2. Which tests need modification or creation
-3. Dependencies between changes (what must be done first)
-4. Verification method for each change
+After the subagent returns:
+
+1. Extract the content between the `SCOPE_ANALYSIS_START` and `SCOPE_ANALYSIS_END` markers
+2. Review for completeness — ensure all changes from proposed_changes.md are covered
+3. Review the suggested task sequence for logical ordering and dependencies
+4. If the subagent failed or returned incomplete results, tell the user and offer to fall back to direct analysis
 
 ### Step 4: Create Task Folder
 
@@ -2272,7 +2426,7 @@ Create `.syskit/tasks/<date>_<change_name>/` with:
 
 ### Step 5: Write Implementation Plan
 
-Create `plan.md`:
+Create `plan.md` using the agent's scope analysis:
 
 ```markdown
 # Implementation Plan: <change name>
@@ -2353,15 +2507,13 @@ Specification References: <REQ-NNN, INT-NNN, UNIT-NNN>
 
 ### Step 7: Present Plan
 
-Output the implementation plan summary and ask:
+Output the implementation plan summary and tell the user:
 
-"Implementation plan created with <n> tasks. 
+"Implementation plan created with <n> tasks in `.syskit/tasks/<folder>/`.
 
-Ready to begin implementation?
-- 'start' to begin with Task 1
-- 'start <n>' to begin with a specific task
-- 'review <n>' to discuss a specific task
-- 'revise' to modify the plan"
+Next step: run `/syskit-implement` to begin working through the tasks.
+
+Tip: Start a new conversation before running the next command to free up context."
 __SYSKIT_TEMPLATE_END__
 
 # --- .claude/commands/syskit-propose.md ---
@@ -2403,35 +2555,95 @@ Run the freshness check script:
 - Recommend re-running impact analysis if changes are significant
 - Proceed with caution if user confirms
 
-### Step 3: Load Affected Documents
+### Step 3: Delegate Change Drafting
 
-Load the full content of all documents marked as affected in the impact analysis.
+Use the Task tool to launch a subagent that reads the affected documents and drafts proposed changes. This keeps the full document contents out of your context window.
 
-### Step 4: Propose Changes
+Launch a `general-purpose` Task agent with this prompt (substitute the actual impact.md content for IMPACT_CONTENT below, and the proposed change description for PROPOSED_CHANGE):
 
-For each affected document, propose specific modifications:
+> You are drafting proposed specification changes based on a completed impact analysis.
+>
+> ## Proposed Change
+>
+> PROPOSED_CHANGE
+>
+> ## Impact Analysis
+>
+> IMPACT_CONTENT
+>
+> ## Instructions
+>
+> 1. Read each document listed as affected (DIRECT, INTERFACE, or DEPENDENT) in the impact analysis above. Read them from the `doc/` directories.
+>
+> 2. For each affected document, draft specific modifications:
+>    - Extract the relevant current content (the sections that need to change)
+>    - Write the proposed new content
+>    - Explain the rationale for the change
+>    - Note any ripple effects to other documents
+>
+> 3. For any proposed changes to requirement documents, validate each requirement statement:
+>    - **Format:** Must use the condition/response pattern: "When [condition], the system SHALL [observable behavior]." If a proposed requirement lacks a trigger condition, identify one and rewrite it.
+>    - **Appropriate Level:** If the proposed requirement specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this and recommend creating/updating an interface document instead, with the requirement referencing it.
+>    - **Singular:** If a proposed requirement addresses multiple capabilities, recommend splitting it.
+>    - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
+>    If any proposed requirement fails validation, include the quality issue in the Rationale section and present a corrected version alongside the original.
+>
+> 4. Return your draft in EXACTLY this structured format:
+>
+> PROPOSED_CHANGES_START
+>
+> ## Document: filename
+>
+> ### Current Content (relevant section)
+>
+> (paste the relevant current content here)
+>
+> ### Proposed Content
+>
+> (paste the proposed new content here)
+>
+> ### Rationale
+>
+> (why this change is needed)
+>
+> ### Ripple Effects
+>
+> - (any effects on other documents)
+>
+> ---
+>
+> ## Document: next filename
+>
+> (repeat for each affected document)
+>
+> ---
+>
+> ## Change Summary
+>
+> | Document | Type | Change Description |
+> |----------|------|-------------------|
+> | filename | Modify | brief description |
+>
+> ## Quality Warnings
+>
+> (list any requirement quality issues found, or "None.")
+>
+> PROPOSED_CHANGES_END
+>
+> Include all affected documents. If a document needs review but no content changes, note that in its Rationale section.
 
-1. Show the relevant current content
-2. Explain what needs to change and why
-3. Show the proposed new content
-4. Note any ripple effects to other documents
+### Step 4: Review Agent Draft
 
-### Step 4.5: Validate Requirement Quality
+After the subagent returns:
 
-For any proposed changes to requirement documents, validate each requirement statement against the quality criteria before including it in the proposal:
-
-1. **Format:** Each requirement must use the condition/response pattern: "When [condition], the system SHALL [observable behavior]." If a proposed requirement lacks a trigger condition, identify one and rewrite it.
-2. **Appropriate Level:** If the proposed requirement specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this and recommend:
-   - Create or update an interface document with the detailed specification
-   - Rewrite the requirement to reference the interface (e.g., "When X occurs, the system SHALL conform to INT-NNN")
-3. **Singular:** If a proposed requirement addresses multiple capabilities, recommend splitting it into separate requirements.
-4. **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion. If a requirement is too vague to test, recommend making it more specific.
-
-If any proposed requirement fails validation, include the quality issue in the "Rationale" section of the proposal and present a corrected version alongside the original for user review.
+1. Extract the content between the `PROPOSED_CHANGES_START` and `PROPOSED_CHANGES_END` markers
+2. Review the draft for completeness — ensure all affected documents from the impact analysis are covered
+3. Review quality warnings and ensure requirement validation was thorough
+4. If the subagent failed or returned incomplete results, tell the user and offer to fall back to direct analysis
 
 ### Step 5: Write Proposed Changes
 
-Create/update `.syskit/analysis/<folder>/proposed_changes.md`:
+Create/update `.syskit/analysis/<folder>/proposed_changes.md` using the agent's draft:
 
 ```markdown
 # Proposed Changes: <change name>
@@ -2496,6 +2708,16 @@ Present a summary of all proposed changes and ask:
 - 'approve <filename>' to apply changes to a specific file
 - 'revise <filename>' to discuss modifications
 - 'reject' to discard this proposal"
+
+### Step 7: Next Step
+
+After applying approved changes, tell the user:
+
+"Proposed changes applied. Results saved to `.syskit/analysis/<folder>/proposed_changes.md`.
+
+Next step: run `/syskit-plan` to create an implementation task breakdown.
+
+Tip: Start a new conversation before running the next command to free up context."
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/templates/CLAUDE_SYSKIT.md ---
@@ -3021,6 +3243,10 @@ This directory contains the system requirements specification — the authoritat
 
 <Brief description of the system: what it is, what it does, and its operational context.>
 
+## Document Description
+
+<Brief overview of what this document covers and how it is organized.>
+
 ## Purpose
 
 Each requirement document defines a single, testable system behavior using the condition/response pattern:
@@ -3062,6 +3288,10 @@ This directory contains the interface specifications — the authoritative recor
 
 <Brief description of the system: what it is, what it does, and its operational context.>
 
+## Document Description
+
+<Brief overview of what this document covers and how it is organized.>
+
 ## Purpose
 
 Each interface document defines a precise contract: data formats, protocols, APIs, or signal definitions that components agree on. Interfaces are the bridge between requirements (what) and design (how), ensuring components can be developed and tested independently.
@@ -3098,6 +3328,10 @@ This directory contains the design specification — the authoritative record of
 ## System Overview
 
 <Brief description of the system: what it is, what it does, and its operational context.>
+
+## Document Description
+
+<Brief overview of what this document covers and how it is organized.>
 
 ## Purpose
 

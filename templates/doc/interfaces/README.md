@@ -8,6 +8,10 @@ This directory contains the interface specifications — the authoritative recor
 
 <Brief description of the system: what it is, what it does, and its operational context.>
 
+## Document Description
+
+<Brief overview of what this document covers and how it is organized.>
+
 ## Purpose
 
 Each interface document defines a precise contract: data formats, protocols, APIs, or signal definitions that components agree on. Interfaces are the bridge between requirements (what) and design (how), ensuring components can be developed and tested independently.

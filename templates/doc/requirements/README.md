@@ -8,6 +8,10 @@ This directory contains the system requirements specification — the authoritat
 
 <Brief description of the system: what it is, what it does, and its operational context.>
 
+## Document Description
+
+<Brief overview of what this document covers and how it is organized.>
+
 ## Purpose
 
 Each requirement document defines a single, testable system behavior using the condition/response pattern:

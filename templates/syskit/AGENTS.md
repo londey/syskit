@@ -81,9 +81,9 @@ Design units describe HOW a piece of the system works.
 
 Always run impact analysis first:
 
-1. Load all documents from `doc/` into context
-2. Analyze which documents are affected by the proposed change
-3. Categorize as DIRECT, DEPENDENT, or INTERFACE impact
+1. Read the manifest to get the current document inventory
+2. Delegate document reading and analysis to a subagent (keeps full document text out of main context)
+3. Validate the subagent's categorization (DIRECT, INTERFACE, DEPENDENT, UNAFFECTED) against the manifest
 4. Check manifest for any documents modified since last analysis
 
 ### Proposing Changes

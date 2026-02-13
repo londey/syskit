@@ -8,6 +8,10 @@ This directory contains the design specification — the authoritative record of
 
 <Brief description of the system: what it is, what it does, and its operational context.>
 
+## Document Description
+
+<Brief overview of what this document covers and how it is organized.>
+
 ## Purpose
 
 Each design unit document describes a cohesive piece of the system: its purpose, the requirements it satisfies, the interfaces it provides and consumes, and its internal behavior. Design units map directly to implementation — each links to source files and test files, enabling full traceability from requirement through design to code.

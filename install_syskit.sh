@@ -122,27 +122,25 @@ Design units describe HOW a piece of the system works.
 Always run impact analysis first:
 
 1. Read the manifest to get the current document inventory
-2. Delegate document reading and analysis to a subagent (keeps full document text out of main context)
-3. Validate the subagent's categorization (DIRECT, INTERFACE, DEPENDENT, UNAFFECTED) against the manifest
+2. Delegate document reading and analysis to a subagent — subagent writes results to disk and returns only a brief summary
+3. Validate the subagent's summary counts against the manifest
 4. Check manifest for any documents modified since last analysis
 
 ### Proposing Changes
 
-1. Create analysis folder: `.syskit/analysis/<date>_<change_name>/`
-2. Write `impact.md` listing affected documents with rationale
-3. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <analysis-folder>`
-4. Write `proposed_changes.md` with specific modifications to each affected document
-5. Wait for human approval before modifying `doc/` files
+1. Ensure `doc/` has no uncommitted changes (clean git status required)
+2. Create analysis folder: `.syskit/analysis/<date>_<change_name>/`
+3. Delegate change drafting to subagent(s) — subagents read impact.md from disk, edit `doc/` files directly, and write a lightweight summary to `proposed_changes.md`
+4. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <analysis-folder>`
+5. User reviews changes via `git diff doc/` and approves, revises, or rejects
 
 ### Planning Implementation
 
-After spec changes are approved and applied:
+After spec changes are approved:
 
-1. Create task folder: `.syskit/tasks/<date>_<change_name>/`
-2. Write `plan.md` with implementation strategy
-3. Write individual `task_NNN_<name>.md` files for each discrete task
-4. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <task-folder>`
-5. Tasks should be small enough to implement and verify independently
+1. Delegate scope extraction and task creation to a subagent — subagent reads proposed_changes.md and `git diff`, writes plan.md and task files to disk
+2. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <task-folder>`
+3. Tasks should be small enough to implement and verify independently
 
 ### Implementing
 
@@ -153,6 +151,20 @@ After spec changes are approved and applied:
 5. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
 6. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
 7. Run `.syskit/scripts/manifest.sh` after doc changes
+
+### Context Budget Management
+
+The workflow commands use subagents to keep document content out of the main context window. Follow these rules to prevent context exhaustion:
+
+1. **Subagents write to disk, return only summaries** — A subagent's final message becomes a tool result in the main context. Keep return messages under 1KB. Write detailed output to files in `.syskit/analysis/` or `.syskit/tasks/`.
+
+2. **Subagents read large files from disk** — Never paste file content larger than 2KB into a subagent prompt. Instead, give the subagent the file path and let it read the file itself.
+
+3. **Chunk large change sets** — When more than 8 documents are affected, use multiple subagents each handling a subset. Assemble results with `.syskit/scripts/assemble-chunks.sh`.
+
+4. **Validate via summaries, not content** — Verify subagent work by checking counts and file lists in the returned summary. Do not read large output files into the main context for review.
+
+5. **Propose edits doc files directly** — Instead of drafting before/after content in a document, subagents edit `doc/` files in place. The user reviews via `git diff`. This eliminates the largest context consumer (full proposed content for every affected file).
 
 ## Freshness Checking
 
@@ -294,6 +306,50 @@ When creating a new implementation file, add a placeholder Spec-ref line:
 
 Then run `impl-stamp.sh UNIT-NNN` to set the correct hash.
 __SYSKIT_TEMPLATE_END__
+
+# --- .syskit/scripts/assemble-chunks.sh ---
+info "Creating .syskit/scripts/assemble-chunks.sh"
+cat > ".syskit/scripts/assemble-chunks.sh" << '__SYSKIT_TEMPLATE_END__'
+#!/bin/bash
+# Assemble chunk files into a single document
+# Usage: assemble-chunks.sh <output-file> <chunk-dir> [chunk-pattern]
+#   Concatenates sorted chunk files with --- separators
+set -e
+
+OUTFILE="${1:?Usage: assemble-chunks.sh <output-file> <chunk-dir> [chunk-pattern]}"
+CHUNK_DIR="${2:?Usage: assemble-chunks.sh <output-file> <chunk-dir> [chunk-pattern]}"
+PATTERN="${3:-chunk_*.md}"
+
+if [ ! -d "$CHUNK_DIR" ]; then
+    echo "Error: chunk directory does not exist: $CHUNK_DIR" >&2
+    exit 1
+fi
+
+# Find chunk files
+CHUNKS=$(find "$CHUNK_DIR" -maxdepth 1 -name "$PATTERN" 2>/dev/null | LC_COLLATE=C sort)
+
+if [ -z "$CHUNKS" ]; then
+    echo "Error: no chunk files matching '$PATTERN' in $CHUNK_DIR" >&2
+    exit 1
+fi
+
+# Start with empty output (or existing file if it has a header)
+FIRST=true
+for chunk in $CHUNKS; do
+    if [ "$FIRST" = true ]; then
+        FIRST=false
+    else
+        echo "" >> "$OUTFILE"
+        echo "---" >> "$OUTFILE"
+        echo "" >> "$OUTFILE"
+    fi
+    cat "$chunk" >> "$OUTFILE"
+done
+
+COUNT=$(echo "$CHUNKS" | wc -l | tr -d ' ')
+echo "Assembled $COUNT chunks into: $OUTFILE"
+__SYSKIT_TEMPLATE_END__
+chmod +x ".syskit/scripts/assemble-chunks.sh"
 
 # --- .syskit/scripts/impl-check.sh ---
 info "Creating .syskit/scripts/impl-check.sh"
@@ -2025,11 +2081,17 @@ Read `.syskit/manifest.md` to get the current list of all specification document
 
 Count the total number of specification documents listed (excluding any with `_000_template` in the name). You will use this count to validate the subagent's output.
 
-### Step 2: Delegate Document Analysis
+### Step 2: Create Analysis Folder
+
+Create the analysis folder: `.syskit/analysis/{{DATE}}_<change_name>/`
+
+Also create a draft staging directory: `.syskit/analysis/_draft/`
+
+### Step 3: Delegate Document Analysis
 
 Use the Task tool to launch a subagent that reads and analyzes all specification documents. This keeps the full document contents out of your context window.
 
-Launch a `general-purpose` Task agent with this prompt (substitute the actual proposed change for PROPOSED_CHANGE below):
+Launch a `general-purpose` Task agent with this prompt (substitute the actual proposed change for PROPOSED_CHANGE below, and the analysis folder path for ANALYSIS_FOLDER):
 
 > You are analyzing the impact of a proposed change on specification documents.
 >
@@ -2064,134 +2126,103 @@ Launch a `general-purpose` Task agent with this prompt (substitute the actual pr
 >    - If an interface is DIRECT or INTERFACE, check which units list it under "Provides" or "Consumes" (those are DEPENDENT)
 >    - If a design unit is DIRECT, check which requirements it implements (review for DEPENDENT impact)
 >
-> 4. Return your analysis in EXACTLY this structured format:
+> 4. Write your complete analysis to `ANALYSIS_FOLDER/impact.md` in this format:
 >
-> IMPACT_ANALYSIS_START
+>    ```markdown
+>    # Impact Analysis: <brief change summary>
 >
-> ## Direct Impacts
+>    Created: <timestamp>
+>    Status: Pending Review
 >
-> ### filename
-> - **ID:** REQ/INT/UNIT-NNN
-> - **Title:** document title
-> - **Impact:** what specifically is affected, 1-2 sentences
-> - **Action Required:** modify/review/no change
-> - **Key References:** cross-referenced IDs found in this document
+>    ## Proposed Change
 >
-> ## Interface Impacts
+>    <detailed description of the change>
 >
-> ### filename
-> - **ID:** INT-NNN
-> - **Title:** document title
-> - **Impact:** what specifically is affected
-> - **Consumers:** UNIT-NNN that consume this interface
-> - **Providers:** UNIT-NNN that provide this interface
-> - **Action Required:** modify/review/no change
+>    ## Direct Impacts
 >
-> ## Dependent Impacts
+>    ### <filename>
+>    - **ID:** <REQ/INT/UNIT-NNN>
+>    - **Title:** <document title>
+>    - **Impact:** <what specifically is affected, 1-2 sentences>
+>    - **Action Required:** <modify/review/no change>
+>    - **Key References:** <cross-referenced IDs found in this document>
 >
-> ### filename
-> - **ID:** REQ/INT/UNIT-NNN
-> - **Title:** document title
-> - **Dependency:** what it depends on that is changing, with specific ID
-> - **Impact:** what specifically is affected
-> - **Action Required:** modify/review/no change
+>    ## Interface Impacts
 >
-> ## Unaffected Documents
+>    ### <filename>
+>    - **ID:** <INT-NNN>
+>    - **Title:** <document title>
+>    - **Impact:** <what specifically is affected>
+>    - **Consumers:** <UNIT-NNN that consume this interface>
+>    - **Providers:** <UNIT-NNN that provide this interface>
+>    - **Action Required:** <modify/review/no change>
 >
-> | Document | ID | Reason Unaffected |
-> |----------|-----|-------------------|
-> | filename | ID | brief reason |
+>    ## Dependent Impacts
 >
-> ## Summary
+>    ### <filename>
+>    - **ID:** <REQ/INT/UNIT-NNN>
+>    - **Title:** <document title>
+>    - **Dependency:** <what it depends on that is changing, with specific ID>
+>    - **Impact:** <what specifically is affected>
+>    - **Action Required:** <modify/review/no change>
 >
-> - **Total Documents:** n
-> - **Directly Affected:** n
-> - **Interface Affected:** n
-> - **Dependently Affected:** n
-> - **Unaffected:** n
+>    ## Unaffected Documents
 >
-> IMPACT_ANALYSIS_END
+>    | Document | ID | Reason Unaffected |
+>    |----------|-----|-------------------|
+>    | <filename> | <ID> | <brief reason> |
 >
-> If a category has no documents, include the heading with "None." underneath.
+>    ## Summary
+>
+>    - **Total Documents:** <n>
+>    - **Directly Affected:** <n>
+>    - **Interface Affected:** <n>
+>    - **Dependently Affected:** <n>
+>    - **Unaffected:** <n>
+>
+>    ## Recommended Next Steps
+>
+>    1. <first action>
+>    2. <second action>
+>    ```
+>
+>    If a category has no documents, include the heading with "None." underneath.
+>
+> 5. After writing the file, return ONLY this compact summary (nothing else):
+>
+>    IMPACT_SUMMARY_START
+>    Total: <n> documents analyzed
+>    Direct: <n> — <comma-separated filenames>
+>    Interface: <n> — <comma-separated filenames>
+>    Dependent: <n> — <comma-separated filenames>
+>    Unaffected: <n>
+>    Written to: ANALYSIS_FOLDER/impact.md
+>    IMPACT_SUMMARY_END
 
-### Step 3: Validate Analysis
+### Step 4: Validate Analysis
 
 After the subagent returns:
 
-1. Extract the structured analysis between the `IMPACT_ANALYSIS_START` and `IMPACT_ANALYSIS_END` markers
-2. Compare the "Total Documents" count from the subagent's summary against the count you computed from the manifest in Step 1
-3. If any documents are missing from the analysis, list them and warn the user
-4. If the subagent failed or returned incomplete results, tell the user and offer to fall back to direct analysis (read all documents yourself)
+1. Parse the summary counts from the `IMPACT_SUMMARY_START`/`IMPACT_SUMMARY_END` block
+2. Compare the "Total" count against the count you computed from the manifest in Step 1
+3. If any documents are missing, list them and warn the user
+4. If the subagent failed or returned incomplete results, tell the user and offer to re-run
 
-### Step 4: Create Analysis Folder
+Do NOT read the full `impact.md` into context. Use the summary to validate.
 
-Create `.syskit/analysis/{{DATE}}_<change_name>/` with:
+### Step 5: Generate Snapshot
 
-1. `impact.md` — The impact report (format below)
-2. `snapshot.md` — Generated by running: `.syskit/scripts/manifest-snapshot.sh .syskit/analysis/{{DATE}}_<change_name>/`
+Run: `.syskit/scripts/manifest-snapshot.sh .syskit/analysis/{{DATE}}_<change_name>/`
 
-### Step 5: Output Impact Report
+Clean up the draft staging directory:
 
-Use the subagent's structured analysis to write `impact.md` in this format:
-
-```markdown
-# Impact Analysis: <brief change summary>
-
-Created: <timestamp>
-Status: Pending Review
-
-## Proposed Change
-
-<detailed description of the change>
-
-## Direct Impacts
-
-### <filename>
-- **ID:** <REQ/INT/UNIT-NNN>
-- **Impact:** <what specifically is affected>
-- **Action Required:** <modify/review/no change>
-
-## Interface Impacts
-
-### <filename>
-- **ID:** <INT-NNN>
-- **Impact:** <what specifically is affected>
-- **Consumers:** <list of units that consume this interface>
-- **Providers:** <list of units that provide this interface>
-- **Action Required:** <modify/review/no change>
-
-## Dependent Impacts
-
-### <filename>
-- **ID:** <REQ/INT/UNIT-NNN>
-- **Dependency:** <what it depends on that is changing>
-- **Impact:** <what specifically is affected>
-- **Action Required:** <modify/review/no change>
-
-## Unaffected Documents
-
-| Document | ID | Reason Unaffected |
-|----------|-----|-------------------|
-| <filename> | <ID> | <brief reason> |
-
-## Summary
-
-- **Total Documents:** <n>
-- **Directly Affected:** <n>
-- **Interface Affected:** <n>
-- **Dependently Affected:** <n>
-- **Unaffected:** <n>
-
-## Recommended Next Steps
-
-1. <first action>
-2. <second action>
-...
+```bash
+rm -rf .syskit/analysis/_draft/
 ```
 
 ### Step 6: Next Step
 
-After presenting the impact report, tell the user:
+Present the summary counts to the user and tell them:
 
 "Impact analysis complete. Results saved to `.syskit/analysis/<folder>/impact.md`.
 
@@ -2342,174 +2373,149 @@ Otherwise:
 
 Verify the status shows changes were approved. If not, prompt user to run `/syskit-propose` first.
 
+Note the analysis folder path — you will pass it to subagents.
+
 ### Step 2: Delegate Scope Extraction
 
 Use the Task tool to launch a subagent that reads the affected documents and design units to extract implementation scope. This keeps the full document contents out of your context window.
 
-Launch a `general-purpose` Task agent with this prompt (substitute the actual proposed_changes.md content for PROPOSED_CHANGES_CONTENT below):
+The subagent reads all needed files from disk — do NOT embed proposed_changes.md content in the prompt.
+
+Launch a `general-purpose` Task agent with this prompt (substitute ANALYSIS_FOLDER with the actual path):
 
 > You are extracting implementation scope from approved specification changes.
 >
-> ## Proposed Changes
->
-> PROPOSED_CHANGES_CONTENT
->
 > ## Instructions
 >
-> 1. Read each specification document referenced in the proposed changes above. Read them from the `doc/` directories.
+> 1. Read the change summary from: `ANALYSIS_FOLDER/proposed_changes.md`
 >
-> 2. Read all design unit documents (`doc/design/unit_*.md`) to understand implementation structure. Focus especially on:
+> 2. Run `git diff doc/` to see the exact specification changes that were applied.
+>
+> 3. Read all design unit documents (`doc/design/unit_*.md`) to understand implementation structure. Focus especially on:
 >    - The `## Implementation` section (lists source files)
 >    - The `## Implements Requirements` section (links to REQ-NNN)
 >    - The `## Provides` and `## Consumes` sections (links to INT-NNN)
 >
-> 3. For each specification change in the proposed changes, identify:
+> 4. For each specification change, identify:
 >    - Which source files need modification (from design unit Implementation sections)
 >    - Which test files need modification or creation
 >    - Dependencies between changes (what must be done first)
 >    - How to verify the change was implemented correctly
 >
-> 4. Return your analysis in EXACTLY this structured format:
+> 5. Create the task folder: `.syskit/tasks/{{DATE}}_<change_name>/`
 >
-> SCOPE_ANALYSIS_START
+> 6. Write `plan.md` to the task folder:
 >
-> ## Implementation Scope
+>    ```markdown
+>    # Implementation Plan: <change name>
 >
-> ### Change: brief description of first change
+>    Based on: ../../.syskit/analysis/<folder>/proposed_changes.md
+>    Created: <timestamp>
+>    Status: In Progress
 >
-> **Affected Specs:** REQ-NNN, INT-NNN, UNIT-NNN
-> **Source Files to Modify:**
-> - `path/to/file`: what needs to change
+>    ## Overview
 >
-> **Source Files to Create:**
-> - `path/to/file`: purpose
+>    <Brief description of what is being implemented>
 >
-> **Test Files:**
-> - `path/to/test`: what to test
+>    ## Specification Changes Applied
 >
-> **Dependencies:** description of what must be done first, or "None"
-> **Verification:** how to verify this change
+>    | Document | Change Type | Summary |
+>    |----------|-------------|---------|
+>    | <doc> | Modified | <summary> |
 >
-> ### Change: brief description of next change
+>    ## Implementation Strategy
 >
-> (repeat for each distinct change)
+>    <High-level approach to implementing these changes>
 >
-> ## Suggested Task Sequence
+>    ## Task Sequence
 >
-> | # | Task | Dependencies | Est. Effort |
-> |---|------|--------------|-------------|
-> | 1 | task name | None | small/medium/large |
-> | 2 | task name | Task 1 | effort |
+>    | # | Task | Dependencies | Est. Effort |
+>    |---|------|--------------|-------------|
+>    | 1 | <task name> | None | <small/medium/large> |
+>    | 2 | <task name> | Task 1 | <effort> |
 >
-> ## Risks and Considerations
+>    ## Verification Approach
 >
-> - risk or consideration
+>    <How we will verify the implementation meets the specifications>
 >
-> SCOPE_ANALYSIS_END
+>    ## Risks and Considerations
+>
+>    - <risk or consideration>
+>    ```
+>
+> 7. Write individual task files `task_NNN_<name>.md` to the task folder:
+>
+>    ```markdown
+>    # Task NNN: <task name>
+>
+>    Status: Pending
+>    Dependencies: <list or "None">
+>    Specification References: <REQ-NNN, INT-NNN, UNIT-NNN>
+>
+>    ## Objective
+>
+>    <What this task accomplishes>
+>
+>    ## Files to Modify
+>
+>    - `<filepath>`: <what changes>
+>
+>    ## Files to Create
+>
+>    - `<filepath>`: <purpose>
+>
+>    ## Implementation Steps
+>
+>    1. <step>
+>    2. <step>
+>    3. <step>
+>
+>    ## Verification
+>
+>    - [ ] <verification criterion>
+>    - [ ] <verification criterion>
+>
+>    ## Notes
+>
+>    <Any additional context or considerations>
+>    ```
+>
+> 8. After writing all files, return ONLY this compact summary (nothing else):
+>
+>    PLAN_SUMMARY_START
+>    Task folder: <path to task folder>
+>    Tasks created: <n>
+>    Task sequence:
+>    1. <task name> (deps: None)
+>    2. <task name> (deps: Task 1)
+>    ...
+>    Source files to modify: <n>
+>    Source files to create: <n>
+>    Risks: <n>
+>    PLAN_SUMMARY_END
 
-### Step 3: Review Scope Analysis
+### Step 3: Validate Plan
 
 After the subagent returns:
 
-1. Extract the content between the `SCOPE_ANALYSIS_START` and `SCOPE_ANALYSIS_END` markers
-2. Review for completeness — ensure all changes from proposed_changes.md are covered
-3. Review the suggested task sequence for logical ordering and dependencies
-4. If the subagent failed or returned incomplete results, tell the user and offer to fall back to direct analysis
+1. Parse the summary to verify the task folder was created and tasks were written
+2. Verify the task count is reasonable for the scope of changes
+3. If the subagent failed or returned incomplete results, tell the user and offer to re-run
 
-### Step 4: Create Task Folder
+Do NOT read the full plan.md or task files into context. Use the summary to validate.
 
-Create `.syskit/tasks/<date>_<change_name>/` with:
+### Step 4: Generate Snapshot
 
-1. `plan.md` — Overall implementation strategy
-2. `snapshot.md` — Generated by running: `.syskit/scripts/manifest-snapshot.sh .syskit/tasks/<date>_<change_name>/`
-3. `task_001_<n>.md` through `task_NNN_<n>.md` — Individual tasks
+Run: `.syskit/scripts/manifest-snapshot.sh <task-folder-path>`
 
-### Step 5: Write Implementation Plan
+### Step 5: Present Plan
 
-Create `plan.md` using the agent's scope analysis:
+Present the task sequence from the subagent's summary and tell the user:
 
-```markdown
-# Implementation Plan: <change name>
+"Implementation plan created with <n> tasks in `<task-folder>`.
 
-Based on: ../.syskit/analysis/<folder>/proposed_changes.md
-Created: <timestamp>
-Status: In Progress
-
-## Overview
-
-<Brief description of what is being implemented>
-
-## Specification Changes Applied
-
-| Document | Change Type | Summary |
-|----------|-------------|---------|
-| <doc> | Modified | <summary> |
-
-## Implementation Strategy
-
-<High-level approach to implementing these changes>
-
-## Task Sequence
-
-| # | Task | Dependencies | Est. Effort |
-|---|------|--------------|-------------|
-| 1 | <task name> | None | <small/medium/large> |
-| 2 | <task name> | Task 1 | <effort> |
-
-## Verification Approach
-
-<How we will verify the implementation meets the specifications>
-
-## Risks and Considerations
-
-- <risk or consideration>
-```
-
-### Step 6: Write Individual Tasks
-
-For each task, create `task_NNN_<n>.md`:
-
-```markdown
-# Task NNN: <task name>
-
-Status: Pending
-Dependencies: <list or "None">
-Specification References: <REQ-NNN, INT-NNN, UNIT-NNN>
-
-## Objective
-
-<What this task accomplishes>
-
-## Files to Modify
-
-- `<filepath>`: <what changes>
-- `<filepath>`: <what changes>
-
-## Files to Create
-
-- `<filepath>`: <purpose>
-
-## Implementation Steps
-
-1. <step>
-2. <step>
-3. <step>
-
-## Verification
-
-- [ ] <verification criterion>
-- [ ] <verification criterion>
-
-## Notes
-
-<Any additional context or considerations>
-```
-
-### Step 7: Present Plan
-
-Output the implementation plan summary and tell the user:
-
-"Implementation plan created with <n> tasks in `.syskit/tasks/<folder>/`.
+**Task sequence:**
+<paste the task sequence from the summary>
 
 Next step: run `/syskit-implement` to begin working through the tasks.
 
@@ -2533,7 +2539,15 @@ You are proposing specific modifications to specifications based on a completed 
 
 ## Instructions
 
-### Step 1: Load the Impact Analysis
+### Step 1: Check Git Status
+
+Run `git status -- doc/` to check for uncommitted changes in the doc directory.
+
+If there are uncommitted changes in `doc/`, **stop and tell the user:**
+
+"There are uncommitted changes in `doc/`. Please commit or stash them before running `/syskit-propose`, so that proposed changes can be reviewed with `git diff` and reverted cleanly if needed."
+
+### Step 2: Load the Impact Analysis
 
 If `$ARGUMENTS.analysis` is provided:
 - Load `.syskit/analysis/$ARGUMENTS.analysis/impact.md`
@@ -2543,7 +2557,9 @@ Otherwise:
 - Find the most recent folder in `.syskit/analysis/`
 - Load `impact.md` and `snapshot.md` from that folder
 
-### Step 2: Check Freshness
+Note the analysis folder path — you will pass it to subagents.
+
+### Step 3: Check Freshness
 
 Run the freshness check script:
 
@@ -2555,165 +2571,227 @@ Run the freshness check script:
 - Recommend re-running impact analysis if changes are significant
 - Proceed with caution if user confirms
 
-### Step 3: Delegate Change Drafting
+### Step 4: Count Affected Documents
 
-Use the Task tool to launch a subagent that reads the affected documents and drafts proposed changes. This keeps the full document contents out of your context window.
+From the impact analysis, count the number of documents with Action Required of "modify" or "review" (across Direct, Interface, and Dependent categories).
 
-Launch a `general-purpose` Task agent with this prompt (substitute the actual impact.md content for IMPACT_CONTENT below, and the proposed change description for PROPOSED_CHANGE):
+Note the list of affected filenames — you will use this to determine the delegation strategy.
 
-> You are drafting proposed specification changes based on a completed impact analysis.
+### Step 5: Delegate Change Drafting
+
+Choose the delegation strategy based on the count of affected documents:
+
+- **8 or fewer affected documents:** Use a single subagent (Step 5a)
+- **More than 8 affected documents:** Use chunked subagents (Step 5b)
+
+#### Step 5a: Single Subagent
+
+Launch a `general-purpose` Task agent with this prompt (substitute ANALYSIS_FOLDER with the actual path, and PROPOSED_CHANGE with the proposed change description from the impact analysis):
+
+> You are drafting and applying proposed specification changes based on a completed impact analysis.
 >
 > ## Proposed Change
 >
 > PROPOSED_CHANGE
 >
-> ## Impact Analysis
+> ## Instructions
 >
-> IMPACT_CONTENT
+> 1. Read the impact analysis from: `ANALYSIS_FOLDER/impact.md`
+>
+> 2. Read each document listed as affected (DIRECT, INTERFACE, or DEPENDENT with Action Required of "modify" or "review"). Read them from the `doc/` directories.
+>
+> 3. For each affected document, **edit the file directly** with the proposed changes:
+>    - Make the specific modifications needed to address the proposed change
+>    - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
+>    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
+>
+> 4. While editing, validate each requirement you modify or create:
+>    - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
+>    - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
+>    - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
+>    - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
+>
+> 5. Write a change summary to `ANALYSIS_FOLDER/proposed_changes.md` in this format:
+>
+>    ```markdown
+>    # Proposed Changes: <change name>
+>
+>    Based on: impact.md
+>    Created: <timestamp>
+>    Status: Pending Approval
+>
+>    ## Change Summary
+>
+>    | Document | Type | Change Description |
+>    |----------|------|-------------------|
+>    | <filename> | Modify | <brief description> |
+>
+>    ## Document: <filename>
+>
+>    ### Rationale
+>
+>    <why this change is needed>
+>
+>    ### Changes Made
+>
+>    <brief description of what was modified — the actual diff is in git>
+>
+>    ### Ripple Effects
+>
+>    - <any effects on other documents>
+>
+>    ---
+>
+>    (repeat for each affected document)
+>
+>    ## Quality Warnings
+>
+>    <list any requirement quality issues found, or "None.">
+>    ```
+>
+> 6. After editing all documents and writing the summary, return ONLY this compact response (nothing else):
+>
+>    PROPOSE_SUMMARY_START
+>    Documents edited: <n>
+>    Files: <comma-separated filenames>
+>    Quality warnings: <n> (<brief list or "None">)
+>    Summary written to: ANALYSIS_FOLDER/proposed_changes.md
+>    PROPOSE_SUMMARY_END
+
+#### Step 5b: Chunked Subagents
+
+Split the affected documents into groups of at most 8, keeping related documents together (e.g., a requirement and the interface it references in the same group). Use the cross-references from the impact analysis to determine grouping.
+
+For each chunk, launch a `general-purpose` Task agent with this prompt (substitute ANALYSIS_FOLDER, PROPOSED_CHANGE, CHUNK_NUMBER, and ASSIGNED_FILES):
+
+> You are drafting and applying proposed specification changes for a subset of affected documents.
+>
+> ## Proposed Change
+>
+> PROPOSED_CHANGE
+>
+> ## Your Assigned Documents
+>
+> ASSIGNED_FILES
 >
 > ## Instructions
 >
-> 1. Read each document listed as affected (DIRECT, INTERFACE, or DEPENDENT) in the impact analysis above. Read them from the `doc/` directories.
+> 1. Read the impact analysis from: `ANALYSIS_FOLDER/impact.md`
 >
-> 2. For each affected document, draft specific modifications:
->    - Extract the relevant current content (the sections that need to change)
->    - Write the proposed new content
->    - Explain the rationale for the change
->    - Note any ripple effects to other documents
+> 2. Read ONLY the documents assigned to you (listed above) from the `doc/` directories.
 >
-> 3. For any proposed changes to requirement documents, validate each requirement statement:
->    - **Format:** Must use the condition/response pattern: "When [condition], the system SHALL [observable behavior]." If a proposed requirement lacks a trigger condition, identify one and rewrite it.
->    - **Appropriate Level:** If the proposed requirement specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this and recommend creating/updating an interface document instead, with the requirement referencing it.
->    - **Singular:** If a proposed requirement addresses multiple capabilities, recommend splitting it.
+> 3. For each assigned document, **edit the file directly** with the proposed changes:
+>    - Make the specific modifications needed to address the proposed change
+>    - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
+>    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
+>
+> 4. While editing, validate each requirement you modify or create:
+>    - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
+>    - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
+>    - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
 >    - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
->    If any proposed requirement fails validation, include the quality issue in the Rationale section and present a corrected version alongside the original.
 >
-> 4. Return your draft in EXACTLY this structured format:
+> 5. Write a chunk summary to `ANALYSIS_FOLDER/chunk_CHUNK_NUMBER.md` in this format:
 >
-> PROPOSED_CHANGES_START
+>    ```markdown
+>    ## Document: <filename>
 >
-> ## Document: filename
+>    ### Rationale
 >
-> ### Current Content (relevant section)
+>    <why this change is needed>
 >
-> (paste the relevant current content here)
+>    ### Changes Made
 >
-> ### Proposed Content
+>    <brief description of what was modified — the actual diff is in git>
 >
-> (paste the proposed new content here)
+>    ### Ripple Effects
 >
-> ### Rationale
+>    - <any effects on other documents>
 >
-> (why this change is needed)
+>    ---
 >
-> ### Ripple Effects
+>    (repeat for each assigned document)
+>    ```
 >
-> - (any effects on other documents)
+> 6. After editing all assigned documents and writing the chunk summary, return ONLY this compact response (nothing else):
 >
-> ---
+>    CHUNK_SUMMARY_START
+>    Chunk: CHUNK_NUMBER
+>    Documents edited: <n>
+>    Files: <comma-separated filenames>
+>    Quality warnings: <n> (<brief list or "None">)
+>    Written to: ANALYSIS_FOLDER/chunk_CHUNK_NUMBER.md
+>    CHUNK_SUMMARY_END
+
+Launch all chunk agents in parallel where possible.
+
+After ALL chunk agents complete, assemble the final summary:
+
+1. Create the header for `proposed_changes.md` with the change name, timestamp, status, and a change summary table built from the chunk summaries
+2. Use bash to assemble: `.syskit/scripts/assemble-chunks.sh .syskit/analysis/<folder>/proposed_changes.md .syskit/analysis/<folder>/ "chunk_*.md"`
+3. Prepend the header to the assembled file
+
+### Step 6: Validate Proposed Changes
+
+After the subagent(s) return:
+
+1. Parse the summary to verify all affected documents were edited
+2. Note any quality warnings reported
+3. If the subagent failed or returned incomplete results, tell the user and offer to re-run
+
+If the change set affects 5 or more documents, launch a validation Task agent:
+
+> You are reviewing proposed specification changes for quality.
 >
-> ## Document: next filename
+> Read all modified files listed in `ANALYSIS_FOLDER/proposed_changes.md` from the `doc/` directories.
 >
-> (repeat for each affected document)
+> Check each modified document for:
+> 1. Requirement statements use condition/response format ("When X, the system SHALL Y")
+> 2. No implementation details in requirements (data layouts, register fields belong in interfaces)
+> 3. Each requirement is singular (not compound)
+> 4. Cross-references (REQ-NNN, INT-NNN, UNIT-NNN) are valid and consistent
+> 5. Changes align with the rationale described in proposed_changes.md
 >
-> ---
+> If you find fixable issues, edit the doc files directly to correct them.
 >
-> ## Change Summary
+> Return ONLY this summary:
 >
-> | Document | Type | Change Description |
-> |----------|------|-------------------|
-> | filename | Modify | brief description |
->
-> ## Quality Warnings
->
-> (list any requirement quality issues found, or "None.")
->
-> PROPOSED_CHANGES_END
->
-> Include all affected documents. If a document needs review but no content changes, note that in its Rationale section.
+> VALIDATION_SUMMARY_START
+> Documents reviewed: <n>
+> Issues found: <n>
+> Issues corrected: <n>
+> Issues requiring human review: <n> — <brief descriptions if any>
+> VALIDATION_SUMMARY_END
 
-### Step 4: Review Agent Draft
+### Step 7: Present Changes for Review
 
-After the subagent returns:
+Tell the user:
 
-1. Extract the content between the `PROPOSED_CHANGES_START` and `PROPOSED_CHANGES_END` markers
-2. Review the draft for completeness — ensure all affected documents from the impact analysis are covered
-3. Review quality warnings and ensure requirement validation was thorough
-4. If the subagent failed or returned incomplete results, tell the user and offer to fall back to direct analysis
+"Proposed changes have been applied directly to the doc files. Review the changes using `git diff doc/` or the VSCode source control panel.
 
-### Step 5: Write Proposed Changes
+**Summary:**
+<paste the change summary table from proposed_changes.md or from the chunk summaries>
 
-Create/update `.syskit/analysis/<folder>/proposed_changes.md` using the agent's draft:
+**Quality warnings:** <list any, or 'None'>
 
-```markdown
-# Proposed Changes: <change name>
+Reply with:
+- **'approve'** to keep all changes and proceed to planning
+- **'approve \<filename\>'** to keep changes to a specific file and revert others
+- **'revise \<filename\>'** to discuss modifications to a specific file
+- **'reject'** to revert all changes (`git checkout -- doc/`)"
 
-Based on: impact.md
-Created: <timestamp>
-Status: Pending Approval
+### Step 8: Handle Approval
 
-## Document: <filename>
+- **approve:** Changes stay. Proceed to Step 9.
+- **approve \<filename\>:** Revert all other files with `git checkout -- doc/<other files>`, keep the specified file(s). Proceed to Step 9.
+- **revise \<filename\>:** Discuss the specific file with the user, make adjustments, then re-present.
+- **reject:** Run `git checkout -- doc/` to revert all changes. Tell the user the proposal has been discarded.
 
-### Current Content (relevant section)
-
-```
-<current content>
-```
-
-### Proposed Content
-
-```
-<proposed content>
-```
-
-### Rationale
-
-<why this change is needed>
-
-### Ripple Effects
-
-- <any effects on other documents>
-
----
-
-## Document: <next filename>
-
-...
-
----
-
-## Change Summary
-
-| Document | Type | Change Description |
-|----------|------|-------------------|
-| <filename> | Modify | <brief description> |
-| <filename> | Add Section | <brief description> |
-| <filename> | Remove | <brief description> |
-
-## Approval Checklist
-
-- [ ] Requirements changes reviewed
-- [ ] Interface changes reviewed
-- [ ] Design changes reviewed
-- [ ] No unintended impacts identified
-- [ ] Ready to apply changes
-```
-
-### Step 6: Request Approval
-
-Present a summary of all proposed changes and ask:
-
-"Please review the proposed changes above. Reply with:
-- 'approve' to apply all changes
-- 'approve <filename>' to apply changes to a specific file
-- 'revise <filename>' to discuss modifications
-- 'reject' to discard this proposal"
-
-### Step 7: Next Step
+### Step 9: Next Step
 
 After applying approved changes, tell the user:
 
-"Proposed changes applied. Results saved to `.syskit/analysis/<folder>/proposed_changes.md`.
+"Proposed changes applied. Summary saved to `.syskit/analysis/<folder>/proposed_changes.md`.
 
 Next step: run `/syskit-plan` to create an implementation task breakdown.
 

@@ -82,27 +82,25 @@ Design units describe HOW a piece of the system works.
 Always run impact analysis first:
 
 1. Read the manifest to get the current document inventory
-2. Delegate document reading and analysis to a subagent (keeps full document text out of main context)
-3. Validate the subagent's categorization (DIRECT, INTERFACE, DEPENDENT, UNAFFECTED) against the manifest
+2. Delegate document reading and analysis to a subagent — subagent writes results to disk and returns only a brief summary
+3. Validate the subagent's summary counts against the manifest
 4. Check manifest for any documents modified since last analysis
 
 ### Proposing Changes
 
-1. Create analysis folder: `.syskit/analysis/<date>_<change_name>/`
-2. Write `impact.md` listing affected documents with rationale
-3. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <analysis-folder>`
-4. Write `proposed_changes.md` with specific modifications to each affected document
-5. Wait for human approval before modifying `doc/` files
+1. Ensure `doc/` has no uncommitted changes (clean git status required)
+2. Create analysis folder: `.syskit/analysis/<date>_<change_name>/`
+3. Delegate change drafting to subagent(s) — subagents read impact.md from disk, edit `doc/` files directly, and write a lightweight summary to `proposed_changes.md`
+4. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <analysis-folder>`
+5. User reviews changes via `git diff doc/` and approves, revises, or rejects
 
 ### Planning Implementation
 
-After spec changes are approved and applied:
+After spec changes are approved:
 
-1. Create task folder: `.syskit/tasks/<date>_<change_name>/`
-2. Write `plan.md` with implementation strategy
-3. Write individual `task_NNN_<name>.md` files for each discrete task
-4. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <task-folder>`
-5. Tasks should be small enough to implement and verify independently
+1. Delegate scope extraction and task creation to a subagent — subagent reads proposed_changes.md and `git diff`, writes plan.md and task files to disk
+2. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <task-folder>`
+3. Tasks should be small enough to implement and verify independently
 
 ### Implementing
 
@@ -113,6 +111,20 @@ After spec changes are approved and applied:
 5. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
 6. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
 7. Run `.syskit/scripts/manifest.sh` after doc changes
+
+### Context Budget Management
+
+The workflow commands use subagents to keep document content out of the main context window. Follow these rules to prevent context exhaustion:
+
+1. **Subagents write to disk, return only summaries** — A subagent's final message becomes a tool result in the main context. Keep return messages under 1KB. Write detailed output to files in `.syskit/analysis/` or `.syskit/tasks/`.
+
+2. **Subagents read large files from disk** — Never paste file content larger than 2KB into a subagent prompt. Instead, give the subagent the file path and let it read the file itself.
+
+3. **Chunk large change sets** — When more than 8 documents are affected, use multiple subagents each handling a subset. Assemble results with `.syskit/scripts/assemble-chunks.sh`.
+
+4. **Validate via summaries, not content** — Verify subagent work by checking counts and file lists in the returned summary. Do not read large output files into the main context for review.
+
+5. **Propose edits doc files directly** — Instead of drafting before/after content in a document, subagents edit `doc/` files in place. The user reviews via `git diff`. This eliminates the largest context consumer (full proposed content for every affected file).
 
 ## Freshness Checking
 

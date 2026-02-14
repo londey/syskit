@@ -27,6 +27,8 @@ mkdir -p doc/requirements
 mkdir -p doc/interfaces
 mkdir -p doc/design
 mkdir -p .syskit/scripts
+mkdir -p .syskit/prompts
+mkdir -p .syskit/ref
 mkdir -p .syskit/analysis
 mkdir -p .syskit/tasks
 mkdir -p .syskit/templates/doc/requirements
@@ -58,62 +60,18 @@ Working documents live under `.syskit/`:
 - `.syskit/tasks/` — Implementation task plans (ephemeral)
 - `.syskit/manifest.md` — SHA256 hashes of all doc files
 
+Reference material for subagents:
+
+- `.syskit/ref/` — Detailed format specs (requirement quality, cross-references, Spec-ref)
+- `.syskit/prompts/` — Subagent prompt templates
+
 ## Document Types
 
-### Requirements (`req_NNN_<name>.md`)
+- **Requirements** (`req_NNN_<name>.md`) — WHAT the system must do. Use condition/response format.
+- **Interfaces** (`int_NNN_<name>.md`) — Contracts between components and external systems.
+- **Design Units** (`unit_NNN_<name>.md`) — HOW the system works. Links to requirements and interfaces.
 
-Requirements state WHAT the system must do, not HOW.
-
-**Required format** — every requirement must use the condition/response pattern:
-
-> **When** [condition/trigger], the system **SHALL/SHOULD/MAY** [observable behavior/response].
-
-- **SHALL** = mandatory, **SHOULD** = recommended, **MAY** = optional
-- Reference interfaces with `INT-NNN`
-- Allocate to design units with `UNIT-NNN`
-
-**Requirement quality criteria** — each requirement must be:
-
-- **Necessary:** Removing it would cause a system deficiency
-- **Singular:** Addresses one thing only — split compound requirements
-- **Correct:** Accurately describes the needed capability
-- **Unambiguous:** Has only one possible interpretation — no vague terms
-- **Feasible:** Can be implemented within known constraints
-- **Appropriate to Level:** Describes capabilities/behaviors, not implementation mechanisms
-- **Complete:** Contains all information needed to implement and verify
-- **Conforming:** Uses the project's standard template and condition/response format
-- **Verifiable:** The condition defines the test setup; the behavior defines the pass criterion
-
-**Level of abstraction** — if a requirement describes data layout, register fields, byte encoding, packet structure, memory maps, or wire protocols, that detail belongs in an interface document (`INT-NNN`), not a requirement. The requirement should reference the interface.
-
-- Wrong: "The system SHALL have an error counter" *(no condition, not testable)*
-- Wrong: "The system SHALL transmit a 16-byte header with bytes 0-3 as a big-endian sequence number" *(implementation detail, belongs in an interface)*
-- Right: "When the system receives a malformed message, the system SHALL discard the message and increment the error counter"
-- Right: "When the system transmits a message, the system SHALL include a unique sequence number per INT-005"
-
-### Interfaces (`int_NNN_<name>.md`)
-
-Interfaces define contracts. They may be:
-
-- **Internal:** Defined by this project (register maps, packet formats, internal APIs)
-- **External:** Defined elsewhere (PNG format, SPI protocol, USB spec)
-
-For external interfaces, document:
-
-- The external specification and version
-- How this system uses/constrains it
-- What subset of features are supported
-
-For internal interfaces, the document IS the specification.
-
-### Design Units (`unit_NNN_<name>.md`)
-
-Design units describe HOW a piece of the system works.
-
-- Reference requirements being implemented with `REQ-NNN`
-- Reference interfaces being implemented/consumed with `INT-NNN`
-- Document internal interfaces to other units
-- Link to implementation files in `src/`
+For detailed format specifications, see `.syskit/ref/document-formats.md`.
 
 ## Workflows
 
@@ -144,13 +102,12 @@ After spec changes are approved:
 
 ### Implementing
 
-1. Work through tasks in order
-2. After each task, verify against relevant requirements
-3. Update design unit documents if implementation details change
-4. Run `.syskit/scripts/trace-sync.sh` to verify cross-references are consistent
-5. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
-6. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
-7. Run `.syskit/scripts/manifest.sh` after doc changes
+1. Delegate implementation to a subagent — subagent reads the task file and all referenced files, makes changes, verifies, returns a summary
+2. After each task, run post-implementation scripts to verify consistency
+3. Run `.syskit/scripts/trace-sync.sh` to verify cross-references are consistent
+4. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
+5. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
+6. Run `.syskit/scripts/manifest.sh` after doc changes
 
 ### Context Budget Management
 
@@ -164,7 +121,9 @@ The workflow commands use subagents to keep document content out of the main con
 
 4. **Validate via summaries, not content** — Verify subagent work by checking counts and file lists in the returned summary. Do not read large output files into the main context for review.
 
-5. **Propose edits doc files directly** — Instead of drafting before/after content in a document, subagents edit `doc/` files in place. The user reviews via `git diff`. This eliminates the largest context consumer (full proposed content for every affected file).
+5. **Edit doc files directly** — Subagents edit `doc/` files in place. The user reviews via `git diff`. This eliminates the largest context consumer (full proposed content for every affected file).
+
+6. **One command per conversation** — Each syskit command persists all state to disk. Start a fresh conversation for each command to avoid context accumulation.
 
 ## Freshness Checking
 
@@ -176,15 +135,7 @@ When loading previous analysis or tasks, run the check script:
 .syskit/scripts/manifest-check.sh <path-to-snapshot.md>
 ```
 
-The script compares snapshot hashes against current file state and reports:
-
-- ✓ unchanged — analysis still valid for this document
-- ⚠ modified — review if changes affect analysis
-- ✗ deleted — analysis references removed document
-
 Exit code 0 means all documents are fresh; exit code 1 means some have changed.
-
-If critical documents changed, recommend re-running analysis.
 
 ## File Numbering
 
@@ -193,118 +144,23 @@ When creating new documents:
 - Find highest existing number in that category
 - Use next number with 3-digit padding: `001`, `002`, etc.
 - Use `_` separator, lowercase, no spaces in names
-- Examples: `req_001_system_overview.md`, `int_003_register_map.md`
 
-### Hierarchical Requirement Numbering
-
-Child requirements use dot-notation to show their parent relationship:
-
-- Top-level: `req_004_motor_control.md` → `REQ-004`
-- Child: `req_004.01_voltage_levels.md` → `REQ-004.01`
-- Grandchild: `req_004.01.03_overvoltage_protection.md` → `REQ-004.01.03`
-
-Top-level IDs use 3-digit padding (`NNN`). Each child level uses 2-digit padding (`.NN`).
-
-This numbering makes the requirement hierarchy visible from the ID alone and groups
-sibling requirements in directory listings.
-
-### Helper Scripts
+Helper scripts:
 
 ```bash
-.syskit/scripts/new-req.sh <name>                        # top-level requirement
-.syskit/scripts/new-req.sh --parent REQ-004 <name>       # child of REQ-004
-.syskit/scripts/new-req.sh --parent REQ-004.01 <name>    # grandchild
+.syskit/scripts/new-req.sh <name>
+.syskit/scripts/new-req.sh --parent REQ-004 <name>
 .syskit/scripts/new-int.sh <name>
 .syskit/scripts/new-unit.sh <name>
 ```
 
 ## Cross-References
 
-Use consistent identifiers when referencing between documents:
+Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN` identifiers when referencing between documents.
 
-- `REQ-001` — Requirement 001 (top-level)
-- `REQ-001.03` — Requirement 001.03 (child of REQ-001)
-- `INT-005` — Interface 005
-- `UNIT-012` — Design unit 012
+For detailed cross-reference rules and the sync tool, see `.syskit/ref/cross-references.md`.
 
-These identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`
-
-Requirements use hierarchical numbering to make decomposition visible. The parent
-relationship is encoded in the ID itself — `REQ-004.15` is a child of `REQ-004`.
-Each requirement still gets its own file, and the `Parent Requirements` field provides
-an explicit back-reference for traceability verification.
-
-### Cross-Reference Sync
-
-After modifying cross-references, run the sync tool to check consistency:
-
-```bash
-.syskit/scripts/trace-sync.sh          # check mode — report issues
-.syskit/scripts/trace-sync.sh --fix    # fix mode — add missing back-references
-```
-
-This tool verifies bidirectional links between documents:
-
-- REQ "Allocated To" ↔ UNIT "Implements Requirements"
-- REQ "Interfaces" ↔ INT "Referenced By"
-- UNIT "Provides" ↔ INT "Parties Provider"
-- UNIT "Consumes" ↔ INT "Parties Consumer"
-
-It also reports broken references (IDs with no matching file) and orphan documents.
-
-**Important:** Do not write custom Python scripts or ad-hoc tools for traceability updates.
-Use `trace-sync.sh` — it requires only standard bash tools.
-
-### Spec-ref: Implementation Traceability
-
-Source files that implement a design unit include a `Spec-ref` comment linking back to the unit document:
-
-```text
-// Spec-ref: unit_006_pixel_pipeline.md `a1b2c3d4e5f6g7h8` 2026-02-11
-```
-
-- Filename: the design unit document basename
-- Hash: 16-char truncated SHA256 of the unit file content (same format as manifest)
-- Date: when the implementation was last synced to the spec
-- Comment prefix matches the source language (`//`, `//!`, `#`, `--`, etc.)
-
-#### Checking Implementation Freshness
-
-```bash
-.syskit/scripts/impl-check.sh              # full scan → .syskit/impl-status.md
-.syskit/scripts/impl-check.sh UNIT-006     # single unit → stdout
-```
-
-Status meanings:
-
-- ✓ current — implementation hash matches current spec
-- ⚠ stale — spec has changed since implementation was last synced
-- ✗ missing — Spec-ref points to a unit file that does not exist
-- ○ untracked — unit lists source files but none have Spec-ref back-references
-
-#### Updating Spec-ref Hashes
-
-After implementing spec changes, update the Spec-ref hashes:
-
-```bash
-.syskit/scripts/impl-stamp.sh UNIT-006
-```
-
-This reads the unit's `## Implementation` section, computes the current SHA256 of the unit file, and updates the hash and date in each source file's Spec-ref comment. It also warns about:
-
-- Source files listed in ## Implementation that have no Spec-ref line
-- Source files with Spec-ref to this unit that are not listed in ## Implementation (orphans)
-
-**Important:** Do not manually edit Spec-ref hash values or write scripts to update them.
-Always use `impl-stamp.sh` — it requires only standard bash tools.
-
-When creating a new implementation file, add a placeholder Spec-ref line:
-
-```text
-// Spec-ref: unit_NNN_name.md `0000000000000000` 1970-01-01
-```
-
-Then run `impl-stamp.sh UNIT-NNN` to set the correct hash.
+For Spec-ref implementation traceability, see `.syskit/ref/spec-ref.md`.
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/scripts/assemble-chunks.sh ---
@@ -1868,6 +1724,675 @@ exit $((TOTAL > 0 ? 1 : 0))
 __SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/trace-sync.sh"
 
+# --- .syskit/prompts/impact-analysis.md ---
+info "Creating .syskit/prompts/impact-analysis.md"
+cat > ".syskit/prompts/impact-analysis.md" << '__SYSKIT_TEMPLATE_END__'
+# Impact Analysis — Subagent Instructions
+
+You are analyzing the impact of a proposed change on specification documents.
+
+## Proposed Change
+
+{{PROPOSED_CHANGE}}
+
+## Instructions
+
+1. Read ALL markdown files in these directories:
+   - `doc/requirements/`
+   - `doc/interfaces/`
+   - `doc/design/`
+
+   Skip any files with `_000_template` in the name.
+
+2. For each document, extract:
+   - The document ID (from the H1 heading, e.g., "REQ-001", "INT-003", "UNIT-007")
+   - The document title (from the H1 heading after the ID)
+   - All cross-references to other documents (REQ-NNN, INT-NNN, UNIT-NNN mentions)
+   - A brief summary of what the document specifies (1-2 sentences)
+
+3. Analyze each document against the proposed change. Categorize as:
+   - **DIRECT**: The document itself describes something being changed
+   - **INTERFACE**: The document defines or uses an interface affected by the change
+   - **DEPENDENT**: The document depends on something being changed (via REQ/INT/UNIT references to a DIRECT or INTERFACE document)
+   - **UNAFFECTED**: The document is not impacted
+
+   When tracing dependencies:
+   - If a requirement is DIRECT, check which design units have it in "Implements Requirements" (those are DEPENDENT)
+   - If a requirement is DIRECT, check which interfaces it lists under "Interfaces" (those are INTERFACE)
+   - If an interface is DIRECT or INTERFACE, check which units list it under "Provides" or "Consumes" (those are DEPENDENT)
+   - If a design unit is DIRECT, check which requirements it implements (review for DEPENDENT impact)
+
+4. Write your complete analysis to `{{ANALYSIS_FOLDER}}/impact.md` in this format:
+
+   ```markdown
+   # Impact Analysis: <brief change summary>
+
+   Created: <timestamp>
+   Status: Pending Review
+
+   ## Proposed Change
+
+   <detailed description of the change>
+
+   ## Direct Impacts
+
+   ### <filename>
+   - **ID:** <REQ/INT/UNIT-NNN>
+   - **Title:** <document title>
+   - **Impact:** <what specifically is affected, 1-2 sentences>
+   - **Action Required:** <modify/review/no change>
+   - **Key References:** <cross-referenced IDs found in this document>
+
+   ## Interface Impacts
+
+   ### <filename>
+   - **ID:** <INT-NNN>
+   - **Title:** <document title>
+   - **Impact:** <what specifically is affected>
+   - **Consumers:** <UNIT-NNN that consume this interface>
+   - **Providers:** <UNIT-NNN that provide this interface>
+   - **Action Required:** <modify/review/no change>
+
+   ## Dependent Impacts
+
+   ### <filename>
+   - **ID:** <REQ/INT/UNIT-NNN>
+   - **Title:** <document title>
+   - **Dependency:** <what it depends on that is changing, with specific ID>
+   - **Impact:** <what specifically is affected>
+   - **Action Required:** <modify/review/no change>
+
+   ## Unaffected Documents
+
+   | Document | ID | Reason Unaffected |
+   |----------|-----|-------------------|
+   | <filename> | <ID> | <brief reason> |
+
+   ## Summary
+
+   - **Total Documents:** <n>
+   - **Directly Affected:** <n>
+   - **Interface Affected:** <n>
+   - **Dependently Affected:** <n>
+   - **Unaffected:** <n>
+
+   ## Recommended Next Steps
+
+   1. <first action>
+   2. <second action>
+   ```
+
+   If a category has no documents, include the heading with "None." underneath.
+
+5. After writing the file, return ONLY this compact summary (nothing else):
+
+   IMPACT_SUMMARY_START
+   Total: <n> documents analyzed
+   Direct: <n> — <comma-separated filenames>
+   Interface: <n> — <comma-separated filenames>
+   Dependent: <n> — <comma-separated filenames>
+   Unaffected: <n>
+   Written to: {{ANALYSIS_FOLDER}}/impact.md
+   IMPACT_SUMMARY_END
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/prompts/implement-task.md ---
+info "Creating .syskit/prompts/implement-task.md"
+cat > ".syskit/prompts/implement-task.md" << '__SYSKIT_TEMPLATE_END__'
+# Implement Task — Subagent Instructions
+
+You are implementing a single task from a syskit implementation plan.
+
+## Your Assignment
+
+- **Task file:** `{{TASK_FILE}}`
+- **Task folder:** `{{TASK_FOLDER}}`
+
+## Instructions
+
+### 1. Read the Task
+
+Read your task file at `{{TASK_FILE}}`. Extract:
+
+- The objective
+- Files to modify and files to create
+- Implementation steps
+- Verification criteria
+- Specification references (REQ-NNN, INT-NNN, UNIT-NNN)
+
+### 2. Read Referenced Files
+
+Read all files listed in:
+
+- **"Files to Modify"** — the source files you will change
+- **"Specification References"** — the spec documents that define the required behavior
+
+Read each file from disk. Understand what the specification requires and what the current implementation looks like.
+
+### 3. Implement
+
+Follow the task's implementation steps:
+
+1. Make the changes described in the task
+2. Edit files directly — do not write to a staging folder
+3. Ensure changes align with the referenced specifications
+4. When creating new source files that implement a design unit, add a placeholder Spec-ref comment:
+   ```
+   // Spec-ref: unit_NNN_name.md `0000000000000000` 1970-01-01
+   ```
+   (The hash will be updated by `impl-stamp.sh` after you finish.)
+
+### 4. Verify
+
+Work through the task's verification checklist:
+
+1. For each verification criterion, confirm it is met
+2. If a criterion cannot be verified, note why
+3. Run any specified tests or build commands
+
+### 5. Update Task Status
+
+Edit the task file to update its status:
+
+```markdown
+Status: Complete
+Completed: {{TIMESTAMP}}
+```
+
+Add a completion summary at the end of the task file:
+
+```markdown
+## Completion Notes
+
+<What was actually done, any deviations from plan>
+
+## Verification Results
+
+- [x] <criterion> — <result>
+- [x] <criterion> — <result>
+```
+
+### 6. Return Summary
+
+After completing all steps, return ONLY this compact response (nothing else):
+
+```
+IMPLEMENT_SUMMARY_START
+Task: <number> — <name>
+Files modified: <n> — <comma-separated paths>
+Files created: <n> — <comma-separated paths>
+Verification: <passed>/<total> criteria passed
+Failed criteria: <list any failures, or "None">
+Issues: <any issues encountered, or "None">
+IMPLEMENT_SUMMARY_END
+```
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/prompts/plan-extract.md ---
+info "Creating .syskit/prompts/plan-extract.md"
+cat > ".syskit/prompts/plan-extract.md" << '__SYSKIT_TEMPLATE_END__'
+# Plan Extraction — Subagent Instructions
+
+You are extracting implementation scope from approved specification changes.
+
+## Instructions
+
+1. Read the change summary from: `{{ANALYSIS_FOLDER}}/proposed_changes.md`
+
+2. Run `git diff doc/` to see the exact specification changes that were applied.
+
+3. Read all design unit documents (`doc/design/unit_*.md`) to understand implementation structure. Focus especially on:
+   - The `## Implementation` section (lists source files)
+   - The `## Implements Requirements` section (links to REQ-NNN)
+   - The `## Provides` and `## Consumes` sections (links to INT-NNN)
+
+4. For each specification change, identify:
+   - Which source files need modification (from design unit Implementation sections)
+   - Which test files need modification or creation
+   - Dependencies between changes (what must be done first)
+   - How to verify the change was implemented correctly
+
+5. Create the task folder: `{{TASK_FOLDER}}`
+
+6. Write `plan.md` to the task folder:
+
+   ```markdown
+   # Implementation Plan: <change name>
+
+   Based on: ../../.syskit/analysis/<folder>/proposed_changes.md
+   Created: <timestamp>
+   Status: In Progress
+
+   ## Overview
+
+   <Brief description of what is being implemented>
+
+   ## Specification Changes Applied
+
+   | Document | Change Type | Summary |
+   |----------|-------------|---------|
+   | <doc> | Modified | <summary> |
+
+   ## Implementation Strategy
+
+   <High-level approach to implementing these changes>
+
+   ## Task Sequence
+
+   | # | Task | Dependencies | Est. Effort |
+   |---|------|--------------|-------------|
+   | 1 | <task name> | None | <small/medium/large> |
+   | 2 | <task name> | Task 1 | <effort> |
+
+   ## Verification Approach
+
+   <How we will verify the implementation meets the specifications>
+
+   ## Risks and Considerations
+
+   - <risk or consideration>
+   ```
+
+7. Write individual task files `task_NNN_<name>.md` to the task folder:
+
+   ```markdown
+   # Task NNN: <task name>
+
+   Status: Pending
+   Dependencies: <list or "None">
+   Specification References: <REQ-NNN, INT-NNN, UNIT-NNN>
+
+   ## Objective
+
+   <What this task accomplishes>
+
+   ## Files to Modify
+
+   - `<filepath>`: <what changes>
+
+   ## Files to Create
+
+   - `<filepath>`: <purpose>
+
+   ## Implementation Steps
+
+   1. <step>
+   2. <step>
+   3. <step>
+
+   ## Verification
+
+   - [ ] <verification criterion>
+   - [ ] <verification criterion>
+
+   ## Notes
+
+   <Any additional context or considerations>
+   ```
+
+8. After writing all files, return ONLY this compact summary (nothing else):
+
+   PLAN_SUMMARY_START
+   Task folder: <path to task folder>
+   Tasks created: <n>
+   Task sequence:
+   1. <task name> (deps: None)
+   2. <task name> (deps: Task 1)
+   ...
+   Source files to modify: <n>
+   Source files to create: <n>
+   Risks: <n>
+   PLAN_SUMMARY_END
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/prompts/propose-chunk.md ---
+info "Creating .syskit/prompts/propose-chunk.md"
+cat > ".syskit/prompts/propose-chunk.md" << '__SYSKIT_TEMPLATE_END__'
+# Propose Changes (Chunk) — Subagent Instructions
+
+You are drafting and applying proposed specification changes for a subset of affected documents.
+
+## Proposed Change
+
+{{PROPOSED_CHANGE}}
+
+## Your Assigned Documents
+
+{{ASSIGNED_FILES}}
+
+## Instructions
+
+1. Read the impact analysis from: `{{ANALYSIS_FOLDER}}/impact.md`
+
+2. Read ONLY the documents assigned to you (listed above) from the `doc/` directories.
+
+3. For each assigned document, **edit the file directly** with the proposed changes:
+   - Make the specific modifications needed to address the proposed change
+   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
+   - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
+
+4. While editing, validate each requirement you modify or create:
+   - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
+   - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
+   - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
+   - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
+
+5. Write a chunk summary to `{{ANALYSIS_FOLDER}}/chunk_{{CHUNK_NUMBER}}.md` in this format:
+
+   ```markdown
+   ## Document: <filename>
+
+   ### Rationale
+
+   <why this change is needed>
+
+   ### Changes Made
+
+   <brief description of what was modified — the actual diff is in git>
+
+   ### Ripple Effects
+
+   - <any effects on other documents>
+
+   ---
+
+   (repeat for each assigned document)
+   ```
+
+6. After editing all assigned documents and writing the chunk summary, return ONLY this compact response (nothing else):
+
+   CHUNK_SUMMARY_START
+   Chunk: {{CHUNK_NUMBER}}
+   Documents edited: <n>
+   Files: <comma-separated filenames>
+   Quality warnings: <n> (<brief list or "None">)
+   Written to: {{ANALYSIS_FOLDER}}/chunk_{{CHUNK_NUMBER}}.md
+   CHUNK_SUMMARY_END
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/prompts/propose-single.md ---
+info "Creating .syskit/prompts/propose-single.md"
+cat > ".syskit/prompts/propose-single.md" << '__SYSKIT_TEMPLATE_END__'
+# Propose Changes (Single) — Subagent Instructions
+
+You are drafting and applying proposed specification changes based on a completed impact analysis.
+
+## Proposed Change
+
+{{PROPOSED_CHANGE}}
+
+## Instructions
+
+1. Read the impact analysis from: `{{ANALYSIS_FOLDER}}/impact.md`
+
+2. Read each document listed as affected (DIRECT, INTERFACE, or DEPENDENT with Action Required of "modify" or "review"). Read them from the `doc/` directories.
+
+3. For each affected document, **edit the file directly** with the proposed changes:
+   - Make the specific modifications needed to address the proposed change
+   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
+   - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
+
+4. While editing, validate each requirement you modify or create:
+   - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
+   - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
+   - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
+   - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
+
+5. Write a change summary to `{{ANALYSIS_FOLDER}}/proposed_changes.md` in this format:
+
+   ```markdown
+   # Proposed Changes: <change name>
+
+   Based on: impact.md
+   Created: <timestamp>
+   Status: Pending Approval
+
+   ## Change Summary
+
+   | Document | Type | Change Description |
+   |----------|------|-------------------|
+   | <filename> | Modify | <brief description> |
+
+   ## Document: <filename>
+
+   ### Rationale
+
+   <why this change is needed>
+
+   ### Changes Made
+
+   <brief description of what was modified — the actual diff is in git>
+
+   ### Ripple Effects
+
+   - <any effects on other documents>
+
+   ---
+
+   (repeat for each affected document)
+
+   ## Quality Warnings
+
+   <list any requirement quality issues found, or "None.">
+   ```
+
+6. After editing all documents and writing the summary, return ONLY this compact response (nothing else):
+
+   PROPOSE_SUMMARY_START
+   Documents edited: <n>
+   Files: <comma-separated filenames>
+   Quality warnings: <n> (<brief list or "None">)
+   Summary written to: {{ANALYSIS_FOLDER}}/proposed_changes.md
+   PROPOSE_SUMMARY_END
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/prompts/propose-validate.md ---
+info "Creating .syskit/prompts/propose-validate.md"
+cat > ".syskit/prompts/propose-validate.md" << '__SYSKIT_TEMPLATE_END__'
+# Propose Validation — Subagent Instructions
+
+You are reviewing proposed specification changes for quality.
+
+Read all modified files listed in `{{ANALYSIS_FOLDER}}/proposed_changes.md` from the `doc/` directories.
+
+Check each modified document for:
+
+1. Requirement statements use condition/response format ("When X, the system SHALL Y")
+2. No implementation details in requirements (data layouts, register fields belong in interfaces)
+3. Each requirement is singular (not compound)
+4. Cross-references (REQ-NNN, INT-NNN, UNIT-NNN) are valid and consistent
+5. Changes align with the rationale described in proposed_changes.md
+
+If you find fixable issues, edit the doc files directly to correct them.
+
+Return ONLY this summary:
+
+VALIDATION_SUMMARY_START
+Documents reviewed: <n>
+Issues found: <n>
+Issues corrected: <n>
+Issues requiring human review: <n> — <brief descriptions if any>
+VALIDATION_SUMMARY_END
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/ref/cross-references.md ---
+info "Creating .syskit/ref/cross-references.md"
+cat > ".syskit/ref/cross-references.md" << '__SYSKIT_TEMPLATE_END__'
+# Cross-Reference Reference
+
+## Identifiers
+
+- `REQ-001` — Requirement 001 (top-level)
+- `REQ-001.03` — Requirement 001.03 (child of REQ-001)
+- `INT-005` — Interface 005
+- `UNIT-012` — Design unit 012
+
+Identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`
+
+## Hierarchical Requirement Numbering
+
+Child requirements use dot-notation to show their parent relationship:
+
+- Top-level: `req_004_motor_control.md` → `REQ-004`
+- Child: `req_004.01_voltage_levels.md` → `REQ-004.01`
+- Grandchild: `req_004.01.03_overvoltage_protection.md` → `REQ-004.01.03`
+
+Top-level IDs use 3-digit padding (`NNN`). Each child level uses 2-digit padding (`.NN`).
+
+## Bidirectional Links
+
+The following links must be maintained bidirectionally:
+
+- REQ "Allocated To" ↔ UNIT "Implements Requirements"
+- REQ "Interfaces" ↔ INT "Referenced By"
+- UNIT "Provides" ↔ INT "Parties Provider"
+- UNIT "Consumes" ↔ INT "Parties Consumer"
+
+## Cross-Reference Sync
+
+After modifying cross-references, run the sync tool:
+
+```bash
+.syskit/scripts/trace-sync.sh          # check mode — report issues
+.syskit/scripts/trace-sync.sh --fix    # fix mode — add missing back-references
+```
+
+This tool verifies bidirectional links and reports broken references (IDs with no matching file) and orphan documents.
+
+**Important:** Do not write custom scripts for traceability updates. Use `trace-sync.sh`.
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/ref/document-formats.md ---
+info "Creating .syskit/ref/document-formats.md"
+cat > ".syskit/ref/document-formats.md" << '__SYSKIT_TEMPLATE_END__'
+# Document Format Reference
+
+## Requirements (`req_NNN_<name>.md`)
+
+Requirements state WHAT the system must do, not HOW.
+
+See `.syskit/ref/requirement-format.md` for the required format, quality criteria, and level-of-abstraction guidance.
+
+## Interfaces (`int_NNN_<name>.md`)
+
+Interfaces define contracts. They may be:
+
+- **Internal:** Defined by this project (register maps, packet formats, internal APIs)
+- **External:** Defined elsewhere (PNG format, SPI protocol, USB spec)
+
+For external interfaces, document:
+
+- The external specification and version
+- How this system uses/constrains it
+- What subset of features are supported
+
+For internal interfaces, the document IS the specification.
+
+## Design Units (`unit_NNN_<name>.md`)
+
+Design units describe HOW a piece of the system works.
+
+- Reference requirements being implemented with `REQ-NNN`
+- Reference interfaces being implemented/consumed with `INT-NNN`
+- Document internal interfaces to other units
+- Link to implementation files in `src/`
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/ref/requirement-format.md ---
+info "Creating .syskit/ref/requirement-format.md"
+cat > ".syskit/ref/requirement-format.md" << '__SYSKIT_TEMPLATE_END__'
+# Requirement Format Reference
+
+## Required Format
+
+Every requirement must use the condition/response pattern:
+
+> **When** [condition/trigger], the system **SHALL/SHOULD/MAY** [observable behavior/response].
+
+- **SHALL** = mandatory, **SHOULD** = recommended, **MAY** = optional
+- Reference interfaces with `INT-NNN`
+- Allocate to design units with `UNIT-NNN`
+
+## Quality Criteria
+
+Each requirement must be:
+
+- **Necessary:** Removing it would cause a system deficiency
+- **Singular:** Addresses one thing only — split compound requirements
+- **Correct:** Accurately describes the needed capability
+- **Unambiguous:** Has only one possible interpretation — no vague terms
+- **Feasible:** Can be implemented within known constraints
+- **Appropriate to Level:** Describes capabilities/behaviors, not implementation mechanisms
+- **Complete:** Contains all information needed to implement and verify
+- **Conforming:** Uses the project's standard template and condition/response format
+- **Verifiable:** The condition defines the test setup; the behavior defines the pass criterion
+
+## Level of Abstraction
+
+If a requirement describes data layout, register fields, byte encoding, packet structure, memory maps, or wire protocols, that detail belongs in an interface document (`INT-NNN`), not a requirement. The requirement should reference the interface.
+
+- Wrong: "The system SHALL have an error counter" *(no condition, not testable)*
+- Wrong: "The system SHALL transmit a 16-byte header with bytes 0-3 as a big-endian sequence number" *(implementation detail, belongs in an interface)*
+- Right: "When the system receives a malformed message, the system SHALL discard the message and increment the error counter"
+- Right: "When the system transmits a message, the system SHALL include a unique sequence number per INT-005"
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/ref/spec-ref.md ---
+info "Creating .syskit/ref/spec-ref.md"
+cat > ".syskit/ref/spec-ref.md" << '__SYSKIT_TEMPLATE_END__'
+# Spec-ref: Implementation Traceability Reference
+
+Source files that implement a design unit include a `Spec-ref` comment linking back to the unit document:
+
+```text
+// Spec-ref: unit_006_pixel_pipeline.md `a1b2c3d4e5f6g7h8` 2026-02-11
+```
+
+- Filename: the design unit document basename
+- Hash: 16-char truncated SHA256 of the unit file content (same format as manifest)
+- Date: when the implementation was last synced to the spec
+- Comment prefix matches the source language (`//`, `//!`, `#`, `--`, etc.)
+
+## Checking Implementation Freshness
+
+```bash
+.syskit/scripts/impl-check.sh              # full scan → .syskit/impl-status.md
+.syskit/scripts/impl-check.sh UNIT-006     # single unit → stdout
+```
+
+Status meanings:
+
+- ✓ current — implementation hash matches current spec
+- ⚠ stale — spec has changed since implementation was last synced
+- ✗ missing — Spec-ref points to a unit file that does not exist
+- ○ untracked — unit lists source files but none have Spec-ref back-references
+
+## Updating Spec-ref Hashes
+
+After implementing spec changes, update the Spec-ref hashes:
+
+```bash
+.syskit/scripts/impl-stamp.sh UNIT-006
+```
+
+This reads the unit's `## Implementation` section, computes the current SHA256 of the unit file, and updates the hash and date in each source file's Spec-ref comment. It also warns about:
+
+- Source files listed in ## Implementation that have no Spec-ref line
+- Source files with Spec-ref to this unit that are not listed in ## Implementation (orphans)
+
+**Important:** Do not manually edit Spec-ref hash values or write scripts to update them. Always use `impl-stamp.sh`.
+
+## Creating New Implementation Files
+
+When creating a new implementation file, add a placeholder Spec-ref line:
+
+```text
+// Spec-ref: unit_NNN_name.md `0000000000000000` 1970-01-01
+```
+
+Then run `impl-stamp.sh UNIT-NNN` to set the correct hash.
+__SYSKIT_TEMPLATE_END__
+
 # --- .claude/commands/syskit-guide.md ---
 info "Creating .claude/commands/syskit-guide.md"
 cat > ".claude/commands/syskit-guide.md" << '__SYSKIT_TEMPLATE_END__'
@@ -2075,6 +2600,14 @@ $ARGUMENTS.change
 
 ## Instructions
 
+### Step 0: Context Check
+
+If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, or IMPLEMENT_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
+
+"This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-impact` — all progress is saved to disk and will be picked up automatically."
+
+If the user explicitly included `--continue` in their command, skip this check and proceed.
+
 ### Step 1: Read Manifest
 
 Read `.syskit/manifest.md` to get the current list of all specification documents and their hashes.
@@ -2091,113 +2624,17 @@ Also create a draft staging directory: `.syskit/analysis/_draft/`
 
 Use the Task tool to launch a subagent that reads and analyzes all specification documents. This keeps the full document contents out of your context window.
 
-Launch a `general-purpose` Task agent with this prompt (substitute the actual proposed change for PROPOSED_CHANGE below, and the analysis folder path for ANALYSIS_FOLDER):
+Launch a `general-purpose` Task agent with this prompt (substitute the actual proposed change for PROPOSED_CHANGE, and the analysis folder path for ANALYSIS_FOLDER):
 
-> You are analyzing the impact of a proposed change on specification documents.
+> Read your full instructions from `.syskit/prompts/impact-analysis.md`.
 >
-> ## Proposed Change
+> Use these values for placeholders in the prompt file:
+> - `{{PROPOSED_CHANGE}}`: PROPOSED_CHANGE
+> - `{{ANALYSIS_FOLDER}}`: ANALYSIS_FOLDER
 >
-> PROPOSED_CHANGE
->
-> ## Instructions
->
-> 1. Read ALL markdown files in these directories:
->    - `doc/requirements/`
->    - `doc/interfaces/`
->    - `doc/design/`
->
->    Skip any files with `_000_template` in the name.
->
-> 2. For each document, extract:
->    - The document ID (from the H1 heading, e.g., "REQ-001", "INT-003", "UNIT-007")
->    - The document title (from the H1 heading after the ID)
->    - All cross-references to other documents (REQ-NNN, INT-NNN, UNIT-NNN mentions)
->    - A brief summary of what the document specifies (1-2 sentences)
->
-> 3. Analyze each document against the proposed change. Categorize as:
->    - **DIRECT**: The document itself describes something being changed
->    - **INTERFACE**: The document defines or uses an interface affected by the change
->    - **DEPENDENT**: The document depends on something being changed (via REQ/INT/UNIT references to a DIRECT or INTERFACE document)
->    - **UNAFFECTED**: The document is not impacted
->
->    When tracing dependencies:
->    - If a requirement is DIRECT, check which design units have it in "Implements Requirements" (those are DEPENDENT)
->    - If a requirement is DIRECT, check which interfaces it lists under "Interfaces" (those are INTERFACE)
->    - If an interface is DIRECT or INTERFACE, check which units list it under "Provides" or "Consumes" (those are DEPENDENT)
->    - If a design unit is DIRECT, check which requirements it implements (review for DEPENDENT impact)
->
-> 4. Write your complete analysis to `ANALYSIS_FOLDER/impact.md` in this format:
->
->    ```markdown
->    # Impact Analysis: <brief change summary>
->
->    Created: <timestamp>
->    Status: Pending Review
->
->    ## Proposed Change
->
->    <detailed description of the change>
->
->    ## Direct Impacts
->
->    ### <filename>
->    - **ID:** <REQ/INT/UNIT-NNN>
->    - **Title:** <document title>
->    - **Impact:** <what specifically is affected, 1-2 sentences>
->    - **Action Required:** <modify/review/no change>
->    - **Key References:** <cross-referenced IDs found in this document>
->
->    ## Interface Impacts
->
->    ### <filename>
->    - **ID:** <INT-NNN>
->    - **Title:** <document title>
->    - **Impact:** <what specifically is affected>
->    - **Consumers:** <UNIT-NNN that consume this interface>
->    - **Providers:** <UNIT-NNN that provide this interface>
->    - **Action Required:** <modify/review/no change>
->
->    ## Dependent Impacts
->
->    ### <filename>
->    - **ID:** <REQ/INT/UNIT-NNN>
->    - **Title:** <document title>
->    - **Dependency:** <what it depends on that is changing, with specific ID>
->    - **Impact:** <what specifically is affected>
->    - **Action Required:** <modify/review/no change>
->
->    ## Unaffected Documents
->
->    | Document | ID | Reason Unaffected |
->    |----------|-----|-------------------|
->    | <filename> | <ID> | <brief reason> |
->
->    ## Summary
->
->    - **Total Documents:** <n>
->    - **Directly Affected:** <n>
->    - **Interface Affected:** <n>
->    - **Dependently Affected:** <n>
->    - **Unaffected:** <n>
->
->    ## Recommended Next Steps
->
->    1. <first action>
->    2. <second action>
->    ```
->
->    If a category has no documents, include the heading with "None." underneath.
->
-> 5. After writing the file, return ONLY this compact summary (nothing else):
->
->    IMPACT_SUMMARY_START
->    Total: <n> documents analyzed
->    Direct: <n> — <comma-separated filenames>
->    Interface: <n> — <comma-separated filenames>
->    Dependent: <n> — <comma-separated filenames>
->    Unaffected: <n>
->    Written to: ANALYSIS_FOLDER/impact.md
->    IMPACT_SUMMARY_END
+> Follow the instructions in the prompt file. Return ONLY the compact summary described at the end.
+
+The subagent will return a summary in `IMPACT_SUMMARY_START`/`IMPACT_SUMMARY_END` format.
 
 ### Step 4: Validate Analysis
 
@@ -2244,22 +2681,27 @@ arguments:
 
 # Implement Task
 
-You are implementing tasks from the current implementation plan.
+You are orchestrating implementation of tasks from the current implementation plan. The actual implementation work is delegated to a subagent to keep your context lean.
 
 ## Instructions
 
-### Step 1: Load Task Plan
+### Step 0: Context Check
 
-Find the most recent folder in `.syskit/tasks/` and load:
-- `plan.md` — Overall plan
-- `snapshot.md` — Document state at planning time
+If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, or IMPLEMENT_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
 
-If `$ARGUMENTS.task` is provided:
-- Load `task_$ARGUMENTS.task_*.md` (matching the number prefix)
+"This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-implement` — all progress is saved to disk and will be picked up automatically."
 
-Otherwise:
-- Find the first task with Status: Pending
-- Or if all complete, report completion
+If the user explicitly included `--continue` in their command, skip this check and proceed.
+
+### Step 1: Find Task Folder and Identify Current Task
+
+Find the most recent folder in `.syskit/tasks/`.
+
+Read ONLY the `## Task Sequence` table from `plan.md` (use a targeted read of the first ~30 lines — do NOT load the full file).
+
+If `$ARGUMENTS.task` is provided, identify the matching task file: `task_$ARGUMENTS.task_*.md`
+
+Otherwise, scan task file headers (first 5 lines of each) to find the first task with `Status: Pending`. If all are complete, report completion and stop.
 
 ### Step 2: Check Freshness
 
@@ -2270,75 +2712,73 @@ Run the freshness check script:
 ```
 
 - If referenced specifications changed (exit code 1), warn user
-- Changes to specs may invalidate the task plan
 - Recommend re-running `/syskit-plan` if changes are significant
 
 ### Step 3: Check Dependencies
 
-Verify all dependency tasks are complete:
+Read only the `Dependencies:` line from the current task file (first 5 lines).
 
-- If dependencies are pending, prompt user to complete them first
-- Or offer to implement the dependency task instead
+If dependencies exist, read only the `Status:` line from each dependency task file. If any dependency is not complete, prompt the user to complete it first or offer to implement the dependency instead.
 
-### Step 4: Load Context
+### Step 4: Delegate Implementation
 
-Load all files listed in the task's "Files to Modify" and "Specification References" sections.
+Launch a `general-purpose` Task agent with this prompt (substitute TASK_FILE with the full path to the task file, TASK_FOLDER with the task folder path, and TIMESTAMP with the current date/time):
 
-Understand:
-- What the specification requires
-- What the current implementation looks like
-- What changes are needed
+> Read your full instructions from `.syskit/prompts/implement-task.md`.
+>
+> Your assignment:
+> - Task file: TASK_FILE
+> - Task folder: TASK_FOLDER
+> - Timestamp: TIMESTAMP
+>
+> In the prompt file, replace `{{TASK_FILE}}` with your task file path, `{{TASK_FOLDER}}` with the task folder path, and `{{TIMESTAMP}}` with the timestamp.
+>
+> Follow the instructions in the prompt file. Return ONLY the compact summary described at the end.
 
-### Step 5: Implement
+### Step 5: Validate Results
 
-Follow the task's implementation steps:
+After the subagent returns:
 
-1. Make the changes described
-2. Explain each change as you make it
-3. Ensure changes align with referenced specifications
+1. Parse the `IMPLEMENT_SUMMARY_START`/`IMPLEMENT_SUMMARY_END` block
+2. Check that all verification criteria passed
+3. If the subagent failed or returned incomplete results, tell the user and offer to re-run
 
-### Step 6: Verify
+If any verification criteria failed, tell the user which ones and ask how to proceed.
 
-Work through the task's verification checklist:
+### Step 6: Post-Implementation Scripts
 
-1. For each verification criterion, confirm it is met
-2. If a criterion cannot be verified, note why
-3. Run any specified tests
+Run these scripts to verify consistency:
 
-### Step 7: Update Task Status
-
-Update the task file:
-
-```markdown
-Status: Complete
-Completed: <timestamp>
+```bash
+.syskit/scripts/trace-sync.sh
 ```
 
-Add a completion summary:
+If trace-sync reports issues, run `.syskit/scripts/trace-sync.sh --fix` and report what was fixed.
 
-```markdown
-## Completion Notes
+For each design unit referenced by the task, update Spec-ref hashes:
 
-<What was actually done, any deviations from plan>
-
-## Verification Results
-
-- [x] <criterion> — <result>
-- [x] <criterion> — <result>
+```bash
+.syskit/scripts/impl-stamp.sh UNIT-NNN
 ```
 
-### Step 8: Next Steps
+Then verify implementation freshness:
+
+```bash
+.syskit/scripts/impl-check.sh
+```
+
+Report any issues from these scripts to the user.
+
+### Step 7: Next Steps
 
 After completing the task:
 
-1. Check if there are more pending tasks
+1. Check if there are more pending tasks (scan task file headers for `Status: Pending`)
 2. If yes, tell the user:
 
 "Task <n> complete.
 
-Next: run `/syskit-implement` to continue with the next pending task.
-
-If context is getting large, start a new conversation — task progress is saved to disk."
+Next: run `/syskit-implement` in a new conversation to continue with the next pending task."
 
 3. If no, report: "All tasks complete. Run `.syskit/scripts/manifest.sh` to update the manifest."
 
@@ -2362,18 +2802,27 @@ You are creating an implementation task breakdown based on approved specificatio
 
 ## Instructions
 
+### Step 0: Context Check
+
+If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, or IMPLEMENT_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
+
+"This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-plan` — all progress is saved to disk and will be picked up automatically."
+
+If the user explicitly included `--continue` in their command, skip this check and proceed.
+
 ### Step 1: Load Approved Changes
 
 If `$ARGUMENTS.analysis` is provided:
-- Load `.syskit/analysis/$ARGUMENTS.analysis/proposed_changes.md`
+
+- Find the analysis folder: `.syskit/analysis/$ARGUMENTS.analysis/`
 
 Otherwise:
+
 - Find the most recent folder in `.syskit/analysis/`
-- Load `proposed_changes.md` from that folder
 
-Verify the status shows changes were approved. If not, prompt user to run `/syskit-propose` first.
+Read ONLY the first ~10 lines of `proposed_changes.md` to check the `Status:` line. If status is not "Approved", prompt user to run `/syskit-propose` first.
 
-Note the analysis folder path — you will pass it to subagents.
+Note the analysis folder path and the change name — you will pass these to the subagent.
 
 ### Step 2: Delegate Scope Extraction
 
@@ -2381,118 +2830,17 @@ Use the Task tool to launch a subagent that reads the affected documents and des
 
 The subagent reads all needed files from disk — do NOT embed proposed_changes.md content in the prompt.
 
-Launch a `general-purpose` Task agent with this prompt (substitute ANALYSIS_FOLDER with the actual path):
+Launch a `general-purpose` Task agent with this prompt (substitute ANALYSIS_FOLDER and TASK_FOLDER):
 
-> You are extracting implementation scope from approved specification changes.
+> Read your full instructions from `.syskit/prompts/plan-extract.md`.
 >
-> ## Instructions
+> Use these values for placeholders in the prompt file:
+> - `{{ANALYSIS_FOLDER}}`: ANALYSIS_FOLDER
+> - `{{TASK_FOLDER}}`: TASK_FOLDER (use `.syskit/tasks/{{DATE}}_<change_name>/`)
 >
-> 1. Read the change summary from: `ANALYSIS_FOLDER/proposed_changes.md`
->
-> 2. Run `git diff doc/` to see the exact specification changes that were applied.
->
-> 3. Read all design unit documents (`doc/design/unit_*.md`) to understand implementation structure. Focus especially on:
->    - The `## Implementation` section (lists source files)
->    - The `## Implements Requirements` section (links to REQ-NNN)
->    - The `## Provides` and `## Consumes` sections (links to INT-NNN)
->
-> 4. For each specification change, identify:
->    - Which source files need modification (from design unit Implementation sections)
->    - Which test files need modification or creation
->    - Dependencies between changes (what must be done first)
->    - How to verify the change was implemented correctly
->
-> 5. Create the task folder: `.syskit/tasks/{{DATE}}_<change_name>/`
->
-> 6. Write `plan.md` to the task folder:
->
->    ```markdown
->    # Implementation Plan: <change name>
->
->    Based on: ../../.syskit/analysis/<folder>/proposed_changes.md
->    Created: <timestamp>
->    Status: In Progress
->
->    ## Overview
->
->    <Brief description of what is being implemented>
->
->    ## Specification Changes Applied
->
->    | Document | Change Type | Summary |
->    |----------|-------------|---------|
->    | <doc> | Modified | <summary> |
->
->    ## Implementation Strategy
->
->    <High-level approach to implementing these changes>
->
->    ## Task Sequence
->
->    | # | Task | Dependencies | Est. Effort |
->    |---|------|--------------|-------------|
->    | 1 | <task name> | None | <small/medium/large> |
->    | 2 | <task name> | Task 1 | <effort> |
->
->    ## Verification Approach
->
->    <How we will verify the implementation meets the specifications>
->
->    ## Risks and Considerations
->
->    - <risk or consideration>
->    ```
->
-> 7. Write individual task files `task_NNN_<name>.md` to the task folder:
->
->    ```markdown
->    # Task NNN: <task name>
->
->    Status: Pending
->    Dependencies: <list or "None">
->    Specification References: <REQ-NNN, INT-NNN, UNIT-NNN>
->
->    ## Objective
->
->    <What this task accomplishes>
->
->    ## Files to Modify
->
->    - `<filepath>`: <what changes>
->
->    ## Files to Create
->
->    - `<filepath>`: <purpose>
->
->    ## Implementation Steps
->
->    1. <step>
->    2. <step>
->    3. <step>
->
->    ## Verification
->
->    - [ ] <verification criterion>
->    - [ ] <verification criterion>
->
->    ## Notes
->
->    <Any additional context or considerations>
->    ```
->
-> 8. After writing all files, return ONLY this compact summary (nothing else):
->
->    PLAN_SUMMARY_START
->    Task folder: <path to task folder>
->    Tasks created: <n>
->    Task sequence:
->    1. <task name> (deps: None)
->    2. <task name> (deps: Task 1)
->    ...
->    Source files to modify: <n>
->    Source files to create: <n>
->    Risks: <n>
->    PLAN_SUMMARY_END
+> Follow the instructions in the prompt file. Return ONLY the compact summary described at the end.
+
+The subagent will return a summary in `PLAN_SUMMARY_START`/`PLAN_SUMMARY_END` format.
 
 ### Step 3: Validate Plan
 
@@ -2539,6 +2887,14 @@ You are proposing specific modifications to specifications based on a completed 
 
 ## Instructions
 
+### Step 0: Context Check
+
+If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, or IMPLEMENT_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
+
+"This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-propose` — all progress is saved to disk and will be picked up automatically."
+
+If the user explicitly included `--continue` in their command, skip this check and proceed.
+
 ### Step 1: Check Git Status
 
 Run `git status -- doc/` to check for uncommitted changes in the doc directory.
@@ -2550,12 +2906,16 @@ If there are uncommitted changes in `doc/`, **stop and tell the user:**
 ### Step 2: Load the Impact Analysis
 
 If `$ARGUMENTS.analysis` is provided:
-- Load `.syskit/analysis/$ARGUMENTS.analysis/impact.md`
-- Load `.syskit/analysis/$ARGUMENTS.analysis/snapshot.md`
+
+- Find the analysis folder: `.syskit/analysis/$ARGUMENTS.analysis/`
 
 Otherwise:
+
 - Find the most recent folder in `.syskit/analysis/`
-- Load `impact.md` and `snapshot.md` from that folder
+
+Read ONLY the `## Summary` section from `impact.md` (the last ~15 lines) to get document counts and the list of affected filenames. Do NOT load the full impact.md into context.
+
+Also note the proposed change description from the first few lines of impact.md.
 
 Note the analysis folder path — you will pass it to subagents.
 
@@ -2573,9 +2933,7 @@ Run the freshness check script:
 
 ### Step 4: Count Affected Documents
 
-From the impact analysis, count the number of documents with Action Required of "modify" or "review" (across Direct, Interface, and Dependent categories).
-
-Note the list of affected filenames — you will use this to determine the delegation strategy.
+From the summary counts, determine the number of documents with Action Required of "modify" or "review" (across Direct, Interface, and Dependent categories).
 
 ### Step 5: Delegate Change Drafting
 
@@ -2586,142 +2944,33 @@ Choose the delegation strategy based on the count of affected documents:
 
 #### Step 5a: Single Subagent
 
-Launch a `general-purpose` Task agent with this prompt (substitute ANALYSIS_FOLDER with the actual path, and PROPOSED_CHANGE with the proposed change description from the impact analysis):
+Launch a `general-purpose` Task agent with this prompt (substitute ANALYSIS_FOLDER and PROPOSED_CHANGE):
 
-> You are drafting and applying proposed specification changes based on a completed impact analysis.
+> Read your full instructions from `.syskit/prompts/propose-single.md`.
 >
-> ## Proposed Change
+> Use these values for placeholders in the prompt file:
+> - `{{PROPOSED_CHANGE}}`: PROPOSED_CHANGE
+> - `{{ANALYSIS_FOLDER}}`: ANALYSIS_FOLDER
 >
-> PROPOSED_CHANGE
->
-> ## Instructions
->
-> 1. Read the impact analysis from: `ANALYSIS_FOLDER/impact.md`
->
-> 2. Read each document listed as affected (DIRECT, INTERFACE, or DEPENDENT with Action Required of "modify" or "review"). Read them from the `doc/` directories.
->
-> 3. For each affected document, **edit the file directly** with the proposed changes:
->    - Make the specific modifications needed to address the proposed change
->    - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
->    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
->
-> 4. While editing, validate each requirement you modify or create:
->    - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
->    - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
->    - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
->    - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
->
-> 5. Write a change summary to `ANALYSIS_FOLDER/proposed_changes.md` in this format:
->
->    ```markdown
->    # Proposed Changes: <change name>
->
->    Based on: impact.md
->    Created: <timestamp>
->    Status: Pending Approval
->
->    ## Change Summary
->
->    | Document | Type | Change Description |
->    |----------|------|-------------------|
->    | <filename> | Modify | <brief description> |
->
->    ## Document: <filename>
->
->    ### Rationale
->
->    <why this change is needed>
->
->    ### Changes Made
->
->    <brief description of what was modified — the actual diff is in git>
->
->    ### Ripple Effects
->
->    - <any effects on other documents>
->
->    ---
->
->    (repeat for each affected document)
->
->    ## Quality Warnings
->
->    <list any requirement quality issues found, or "None.">
->    ```
->
-> 6. After editing all documents and writing the summary, return ONLY this compact response (nothing else):
->
->    PROPOSE_SUMMARY_START
->    Documents edited: <n>
->    Files: <comma-separated filenames>
->    Quality warnings: <n> (<brief list or "None">)
->    Summary written to: ANALYSIS_FOLDER/proposed_changes.md
->    PROPOSE_SUMMARY_END
+> Follow the instructions in the prompt file. Return ONLY the compact summary described at the end.
+
+The subagent will return a summary in `PROPOSE_SUMMARY_START`/`PROPOSE_SUMMARY_END` format.
 
 #### Step 5b: Chunked Subagents
 
-Split the affected documents into groups of at most 8, keeping related documents together (e.g., a requirement and the interface it references in the same group). Use the cross-references from the impact analysis to determine grouping.
+Split the affected documents into groups of at most 8, keeping related documents together (e.g., a requirement and the interface it references in the same group).
 
 For each chunk, launch a `general-purpose` Task agent with this prompt (substitute ANALYSIS_FOLDER, PROPOSED_CHANGE, CHUNK_NUMBER, and ASSIGNED_FILES):
 
-> You are drafting and applying proposed specification changes for a subset of affected documents.
+> Read your full instructions from `.syskit/prompts/propose-chunk.md`.
 >
-> ## Proposed Change
+> Use these values for placeholders in the prompt file:
+> - `{{PROPOSED_CHANGE}}`: PROPOSED_CHANGE
+> - `{{ANALYSIS_FOLDER}}`: ANALYSIS_FOLDER
+> - `{{CHUNK_NUMBER}}`: CHUNK_NUMBER
+> - `{{ASSIGNED_FILES}}`: ASSIGNED_FILES
 >
-> PROPOSED_CHANGE
->
-> ## Your Assigned Documents
->
-> ASSIGNED_FILES
->
-> ## Instructions
->
-> 1. Read the impact analysis from: `ANALYSIS_FOLDER/impact.md`
->
-> 2. Read ONLY the documents assigned to you (listed above) from the `doc/` directories.
->
-> 3. For each assigned document, **edit the file directly** with the proposed changes:
->    - Make the specific modifications needed to address the proposed change
->    - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
->    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
->
-> 4. While editing, validate each requirement you modify or create:
->    - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
->    - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
->    - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
->    - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
->
-> 5. Write a chunk summary to `ANALYSIS_FOLDER/chunk_CHUNK_NUMBER.md` in this format:
->
->    ```markdown
->    ## Document: <filename>
->
->    ### Rationale
->
->    <why this change is needed>
->
->    ### Changes Made
->
->    <brief description of what was modified — the actual diff is in git>
->
->    ### Ripple Effects
->
->    - <any effects on other documents>
->
->    ---
->
->    (repeat for each assigned document)
->    ```
->
-> 6. After editing all assigned documents and writing the chunk summary, return ONLY this compact response (nothing else):
->
->    CHUNK_SUMMARY_START
->    Chunk: CHUNK_NUMBER
->    Documents edited: <n>
->    Files: <comma-separated filenames>
->    Quality warnings: <n> (<brief list or "None">)
->    Written to: ANALYSIS_FOLDER/chunk_CHUNK_NUMBER.md
->    CHUNK_SUMMARY_END
+> Follow the instructions in the prompt file. Return ONLY the compact summary described at the end.
 
 Launch all chunk agents in parallel where possible.
 
@@ -2741,27 +2990,14 @@ After the subagent(s) return:
 
 If the change set affects 5 or more documents, launch a validation Task agent:
 
-> You are reviewing proposed specification changes for quality.
+> Read your full instructions from `.syskit/prompts/propose-validate.md`.
 >
-> Read all modified files listed in `ANALYSIS_FOLDER/proposed_changes.md` from the `doc/` directories.
+> Use this value for placeholders in the prompt file:
+> - `{{ANALYSIS_FOLDER}}`: ANALYSIS_FOLDER
 >
-> Check each modified document for:
-> 1. Requirement statements use condition/response format ("When X, the system SHALL Y")
-> 2. No implementation details in requirements (data layouts, register fields belong in interfaces)
-> 3. Each requirement is singular (not compound)
-> 4. Cross-references (REQ-NNN, INT-NNN, UNIT-NNN) are valid and consistent
-> 5. Changes align with the rationale described in proposed_changes.md
->
-> If you find fixable issues, edit the doc files directly to correct them.
->
-> Return ONLY this summary:
->
-> VALIDATION_SUMMARY_START
-> Documents reviewed: <n>
-> Issues found: <n>
-> Issues corrected: <n>
-> Issues requiring human review: <n> — <brief descriptions if any>
-> VALIDATION_SUMMARY_END
+> Follow the instructions in the prompt file. Return ONLY the compact summary described at the end.
+
+The subagent will return a summary in `VALIDATION_SUMMARY_START`/`VALIDATION_SUMMARY_END` format.
 
 ### Step 7: Present Changes for Review
 
@@ -2770,7 +3006,7 @@ Tell the user:
 "Proposed changes have been applied directly to the doc files. Review the changes using `git diff doc/` or the VSCode source control panel.
 
 **Summary:**
-<paste the change summary table from proposed_changes.md or from the chunk summaries>
+<paste the change summary table from the subagent's returned summary>
 
 **Quality warnings:** <list any, or 'None'>
 
@@ -2825,10 +3061,10 @@ New to syskit? Run `/syskit-guide` for an interactive walkthrough.
 
 ### Reference
 
-- Full instructions: `.syskit/AGENTS.md`
 - Specifications: `doc/requirements/`, `doc/interfaces/`, `doc/design/`
 - Working documents: `.syskit/analysis/`, `.syskit/tasks/`
 - Scripts: `.syskit/scripts/`
+- Full instructions: `.syskit/AGENTS.md` (read on demand, not auto-loaded)
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/templates/doc/requirements/req_000_template.md ---

@@ -18,62 +18,18 @@ Working documents live under `.syskit/`:
 - `.syskit/tasks/` — Implementation task plans (ephemeral)
 - `.syskit/manifest.md` — SHA256 hashes of all doc files
 
+Reference material for subagents:
+
+- `.syskit/ref/` — Detailed format specs (requirement quality, cross-references, Spec-ref)
+- `.syskit/prompts/` — Subagent prompt templates
+
 ## Document Types
 
-### Requirements (`req_NNN_<name>.md`)
+- **Requirements** (`req_NNN_<name>.md`) — WHAT the system must do. Use condition/response format.
+- **Interfaces** (`int_NNN_<name>.md`) — Contracts between components and external systems.
+- **Design Units** (`unit_NNN_<name>.md`) — HOW the system works. Links to requirements and interfaces.
 
-Requirements state WHAT the system must do, not HOW.
-
-**Required format** — every requirement must use the condition/response pattern:
-
-> **When** [condition/trigger], the system **SHALL/SHOULD/MAY** [observable behavior/response].
-
-- **SHALL** = mandatory, **SHOULD** = recommended, **MAY** = optional
-- Reference interfaces with `INT-NNN`
-- Allocate to design units with `UNIT-NNN`
-
-**Requirement quality criteria** — each requirement must be:
-
-- **Necessary:** Removing it would cause a system deficiency
-- **Singular:** Addresses one thing only — split compound requirements
-- **Correct:** Accurately describes the needed capability
-- **Unambiguous:** Has only one possible interpretation — no vague terms
-- **Feasible:** Can be implemented within known constraints
-- **Appropriate to Level:** Describes capabilities/behaviors, not implementation mechanisms
-- **Complete:** Contains all information needed to implement and verify
-- **Conforming:** Uses the project's standard template and condition/response format
-- **Verifiable:** The condition defines the test setup; the behavior defines the pass criterion
-
-**Level of abstraction** — if a requirement describes data layout, register fields, byte encoding, packet structure, memory maps, or wire protocols, that detail belongs in an interface document (`INT-NNN`), not a requirement. The requirement should reference the interface.
-
-- Wrong: "The system SHALL have an error counter" *(no condition, not testable)*
-- Wrong: "The system SHALL transmit a 16-byte header with bytes 0-3 as a big-endian sequence number" *(implementation detail, belongs in an interface)*
-- Right: "When the system receives a malformed message, the system SHALL discard the message and increment the error counter"
-- Right: "When the system transmits a message, the system SHALL include a unique sequence number per INT-005"
-
-### Interfaces (`int_NNN_<name>.md`)
-
-Interfaces define contracts. They may be:
-
-- **Internal:** Defined by this project (register maps, packet formats, internal APIs)
-- **External:** Defined elsewhere (PNG format, SPI protocol, USB spec)
-
-For external interfaces, document:
-
-- The external specification and version
-- How this system uses/constrains it
-- What subset of features are supported
-
-For internal interfaces, the document IS the specification.
-
-### Design Units (`unit_NNN_<name>.md`)
-
-Design units describe HOW a piece of the system works.
-
-- Reference requirements being implemented with `REQ-NNN`
-- Reference interfaces being implemented/consumed with `INT-NNN`
-- Document internal interfaces to other units
-- Link to implementation files in `src/`
+For detailed format specifications, see `.syskit/ref/document-formats.md`.
 
 ## Workflows
 
@@ -104,13 +60,12 @@ After spec changes are approved:
 
 ### Implementing
 
-1. Work through tasks in order
-2. After each task, verify against relevant requirements
-3. Update design unit documents if implementation details change
-4. Run `.syskit/scripts/trace-sync.sh` to verify cross-references are consistent
-5. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
-6. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
-7. Run `.syskit/scripts/manifest.sh` after doc changes
+1. Delegate implementation to a subagent — subagent reads the task file and all referenced files, makes changes, verifies, returns a summary
+2. After each task, run post-implementation scripts to verify consistency
+3. Run `.syskit/scripts/trace-sync.sh` to verify cross-references are consistent
+4. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
+5. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
+6. Run `.syskit/scripts/manifest.sh` after doc changes
 
 ### Context Budget Management
 
@@ -124,7 +79,9 @@ The workflow commands use subagents to keep document content out of the main con
 
 4. **Validate via summaries, not content** — Verify subagent work by checking counts and file lists in the returned summary. Do not read large output files into the main context for review.
 
-5. **Propose edits doc files directly** — Instead of drafting before/after content in a document, subagents edit `doc/` files in place. The user reviews via `git diff`. This eliminates the largest context consumer (full proposed content for every affected file).
+5. **Edit doc files directly** — Subagents edit `doc/` files in place. The user reviews via `git diff`. This eliminates the largest context consumer (full proposed content for every affected file).
+
+6. **One command per conversation** — Each syskit command persists all state to disk. Start a fresh conversation for each command to avoid context accumulation.
 
 ## Freshness Checking
 
@@ -136,15 +93,7 @@ When loading previous analysis or tasks, run the check script:
 .syskit/scripts/manifest-check.sh <path-to-snapshot.md>
 ```
 
-The script compares snapshot hashes against current file state and reports:
-
-- ✓ unchanged — analysis still valid for this document
-- ⚠ modified — review if changes affect analysis
-- ✗ deleted — analysis references removed document
-
 Exit code 0 means all documents are fresh; exit code 1 means some have changed.
-
-If critical documents changed, recommend re-running analysis.
 
 ## File Numbering
 
@@ -153,115 +102,20 @@ When creating new documents:
 - Find highest existing number in that category
 - Use next number with 3-digit padding: `001`, `002`, etc.
 - Use `_` separator, lowercase, no spaces in names
-- Examples: `req_001_system_overview.md`, `int_003_register_map.md`
 
-### Hierarchical Requirement Numbering
-
-Child requirements use dot-notation to show their parent relationship:
-
-- Top-level: `req_004_motor_control.md` → `REQ-004`
-- Child: `req_004.01_voltage_levels.md` → `REQ-004.01`
-- Grandchild: `req_004.01.03_overvoltage_protection.md` → `REQ-004.01.03`
-
-Top-level IDs use 3-digit padding (`NNN`). Each child level uses 2-digit padding (`.NN`).
-
-This numbering makes the requirement hierarchy visible from the ID alone and groups
-sibling requirements in directory listings.
-
-### Helper Scripts
+Helper scripts:
 
 ```bash
-.syskit/scripts/new-req.sh <name>                        # top-level requirement
-.syskit/scripts/new-req.sh --parent REQ-004 <name>       # child of REQ-004
-.syskit/scripts/new-req.sh --parent REQ-004.01 <name>    # grandchild
+.syskit/scripts/new-req.sh <name>
+.syskit/scripts/new-req.sh --parent REQ-004 <name>
 .syskit/scripts/new-int.sh <name>
 .syskit/scripts/new-unit.sh <name>
 ```
 
 ## Cross-References
 
-Use consistent identifiers when referencing between documents:
+Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN` identifiers when referencing between documents.
 
-- `REQ-001` — Requirement 001 (top-level)
-- `REQ-001.03` — Requirement 001.03 (child of REQ-001)
-- `INT-005` — Interface 005
-- `UNIT-012` — Design unit 012
+For detailed cross-reference rules and the sync tool, see `.syskit/ref/cross-references.md`.
 
-These identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`
-
-Requirements use hierarchical numbering to make decomposition visible. The parent
-relationship is encoded in the ID itself — `REQ-004.15` is a child of `REQ-004`.
-Each requirement still gets its own file, and the `Parent Requirements` field provides
-an explicit back-reference for traceability verification.
-
-### Cross-Reference Sync
-
-After modifying cross-references, run the sync tool to check consistency:
-
-```bash
-.syskit/scripts/trace-sync.sh          # check mode — report issues
-.syskit/scripts/trace-sync.sh --fix    # fix mode — add missing back-references
-```
-
-This tool verifies bidirectional links between documents:
-
-- REQ "Allocated To" ↔ UNIT "Implements Requirements"
-- REQ "Interfaces" ↔ INT "Referenced By"
-- UNIT "Provides" ↔ INT "Parties Provider"
-- UNIT "Consumes" ↔ INT "Parties Consumer"
-
-It also reports broken references (IDs with no matching file) and orphan documents.
-
-**Important:** Do not write custom Python scripts or ad-hoc tools for traceability updates.
-Use `trace-sync.sh` — it requires only standard bash tools.
-
-### Spec-ref: Implementation Traceability
-
-Source files that implement a design unit include a `Spec-ref` comment linking back to the unit document:
-
-```text
-// Spec-ref: unit_006_pixel_pipeline.md `a1b2c3d4e5f6g7h8` 2026-02-11
-```
-
-- Filename: the design unit document basename
-- Hash: 16-char truncated SHA256 of the unit file content (same format as manifest)
-- Date: when the implementation was last synced to the spec
-- Comment prefix matches the source language (`//`, `//!`, `#`, `--`, etc.)
-
-#### Checking Implementation Freshness
-
-```bash
-.syskit/scripts/impl-check.sh              # full scan → .syskit/impl-status.md
-.syskit/scripts/impl-check.sh UNIT-006     # single unit → stdout
-```
-
-Status meanings:
-
-- ✓ current — implementation hash matches current spec
-- ⚠ stale — spec has changed since implementation was last synced
-- ✗ missing — Spec-ref points to a unit file that does not exist
-- ○ untracked — unit lists source files but none have Spec-ref back-references
-
-#### Updating Spec-ref Hashes
-
-After implementing spec changes, update the Spec-ref hashes:
-
-```bash
-.syskit/scripts/impl-stamp.sh UNIT-006
-```
-
-This reads the unit's `## Implementation` section, computes the current SHA256 of the unit file, and updates the hash and date in each source file's Spec-ref comment. It also warns about:
-
-- Source files listed in ## Implementation that have no Spec-ref line
-- Source files with Spec-ref to this unit that are not listed in ## Implementation (orphans)
-
-**Important:** Do not manually edit Spec-ref hash values or write scripts to update them.
-Always use `impl-stamp.sh` — it requires only standard bash tools.
-
-When creating a new implementation file, add a placeholder Spec-ref line:
-
-```text
-// Spec-ref: unit_NNN_name.md `0000000000000000` 1970-01-01
-```
-
-Then run `impl-stamp.sh UNIT-NNN` to set the correct hash.
+For Spec-ref implementation traceability, see `.syskit/ref/spec-ref.md`.

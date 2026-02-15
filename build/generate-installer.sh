@@ -39,6 +39,8 @@ mkdir -p doc/requirements
 mkdir -p doc/interfaces
 mkdir -p doc/design
 mkdir -p .syskit/scripts
+mkdir -p .syskit/prompts
+mkdir -p .syskit/ref
 mkdir -p .syskit/analysis
 mkdir -p .syskit/tasks
 mkdir -p .syskit/templates/doc/requirements
@@ -85,6 +87,18 @@ embed_file "$TEMPLATES_DIR/syskit/AGENTS.md" ".syskit/AGENTS.md" >> "$OUTPUT"
 for f in $(printf '%s\n' "$TEMPLATES_DIR/syskit/scripts/"*.sh | LC_COLLATE=C sort); do
     name=$(basename "$f")
     embed_file "$f" ".syskit/scripts/$name" "755" >> "$OUTPUT"
+done
+
+# Embed subagent prompt templates (sorted for reproducible output)
+for f in $(printf '%s\n' "$TEMPLATES_DIR/syskit/prompts/"*.md | LC_COLLATE=C sort); do
+    name=$(basename "$f")
+    embed_file "$f" ".syskit/prompts/$name" >> "$OUTPUT"
+done
+
+# Embed reference files (sorted for reproducible output)
+for f in $(printf '%s\n' "$TEMPLATES_DIR/syskit/ref/"*.md | LC_COLLATE=C sort); do
+    name=$(basename "$f")
+    embed_file "$f" ".syskit/ref/$name" >> "$OUTPUT"
 done
 
 # Embed Claude commands (sorted for reproducible output)

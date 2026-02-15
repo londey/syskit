@@ -107,7 +107,7 @@ After spec changes are approved:
 3. Run `.syskit/scripts/trace-sync.sh` to verify cross-references are consistent
 4. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
 5. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
-6. Run `.syskit/scripts/manifest.sh` after doc changes
+6. After doc changes, run `.syskit/scripts/manifest.sh` to update the manifest
 
 ### Context Budget Management
 
@@ -2780,7 +2780,7 @@ After completing the task:
 
 Next: run `/syskit-implement` in a new conversation to continue with the next pending task."
 
-3. If no, report: "All tasks complete. Run `.syskit/scripts/manifest.sh` to update the manifest."
+3. If no, run `.syskit/scripts/manifest.sh` to update the manifest, then report: "All tasks complete. Manifest updated."
 
 Also remind to update any design documents if implementation details changed.
 __SYSKIT_TEMPLATE_END__

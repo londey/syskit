@@ -84,8 +84,8 @@ for f in "$TASK_FOLDER"/task_[0-9][0-9][0-9]_*.md; do
 
     if [ -n "$REQUESTED_TASK" ]; then
         # Match by task number (with or without leading zeros)
-        req_num=$(printf "%d" "$REQUESTED_TASK" 2>/dev/null || echo "$REQUESTED_TASK")
-        file_num=$(printf "%d" "$num" 2>/dev/null || echo "$num")
+        req_num=$((10#$REQUESTED_TASK)) 2>/dev/null || req_num="$REQUESTED_TASK"
+        file_num=$((10#$num)) 2>/dev/null || file_num="$num"
         if [ "$req_num" = "$file_num" ] && [ -z "$TASK_FILE" ]; then
             TASK_FILE="$f"
             TASK_NUMBER="$num"
@@ -151,8 +151,8 @@ if [ -n "$DEPS_LINE" ]; then
 
     for dep_num in $dep_nums; do
         # Skip if it's the same task
-        task_num_int=$(printf "%d" "$TASK_NUMBER" 2>/dev/null)
-        dep_num_int=$(printf "%d" "$dep_num" 2>/dev/null)
+        task_num_int=$((10#$TASK_NUMBER))
+        dep_num_int=$((10#$dep_num))
         [ "$dep_num_int" -eq "$task_num_int" ] 2>/dev/null && continue
 
         # Find the dependency task file

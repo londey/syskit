@@ -121,12 +121,14 @@ Helper scripts:
 .syskit/scripts/new-req.sh <name>
 .syskit/scripts/new-req.sh --parent REQ-004 <name>
 .syskit/scripts/new-int.sh <name>
+.syskit/scripts/new-int.sh --parent INT-005 <name>
 .syskit/scripts/new-unit.sh <name>
+.syskit/scripts/new-unit.sh --parent UNIT-002 <name>
 ```
 
 ## Cross-References
 
-Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN` identifiers when referencing between documents.
+Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN` identifiers (or `REQ-NNN.NN`, `INT-NNN.NN`, `UNIT-NNN.NN` for children) when referencing between documents.
 
 For detailed cross-reference rules and the sync tool, see `.syskit/ref/cross-references.md`.
 

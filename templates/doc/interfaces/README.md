@@ -25,8 +25,9 @@ Interface types:
 ## Conventions
 
 - **Naming:** `int_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
-- **Create new:** `.syskit/scripts/new-int.sh <name>`
-- **Cross-references:** Use `INT-NNN` identifiers (derived from filename)
+- **Child interfaces:** `int_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `int_005.01_uart_registers.md`)
+- **Create new:** `.syskit/scripts/new-int.sh <name>` or `.syskit/scripts/new-int.sh --parent INT-NNN <name>`
+- **Cross-references:** Use `INT-NNN` or `INT-NNN.NN` identifiers (derived from filename)
 - **Parties:** Each interface has a Provider and one or more Consumers
 
 ## Table of Contents

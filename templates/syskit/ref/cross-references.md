@@ -3,21 +3,26 @@
 ## Identifiers
 
 - `REQ-001` — Requirement 001 (top-level)
-- `REQ-001.03` — Requirement 001.03 (child of REQ-001)
-- `INT-005` — Interface 005
-- `UNIT-012` — Design unit 012
+- `REQ-001.03` — Requirement 001, child 03
+- `INT-005` — Interface 005 (top-level)
+- `INT-005.01` — Interface 005, child 01
+- `UNIT-012` — Design unit 012 (top-level)
+- `UNIT-012.03` — Design unit 012, child 03
 
-Identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`
+Identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`, `int_005.01_uart.md` → `INT-005.01`, `unit_012.03_pid.md` → `UNIT-012.03`
 
-## Hierarchical Requirement Numbering
+## Hierarchical Numbering
 
-Child requirements use dot-notation to show their parent relationship:
+All document types support two-level hierarchy using dot-notation. Child documents use `NNN.NN` to show their parent:
 
 - Top-level: `req_004_motor_control.md` → `REQ-004`
 - Child: `req_004.01_voltage_levels.md` → `REQ-004.01`
-- Grandchild: `req_004.01.03_overvoltage_protection.md` → `REQ-004.01.03`
+- Top-level: `int_005_peripheral_bus.md` → `INT-005`
+- Child: `int_005.01_uart_registers.md` → `INT-005.01`
+- Top-level: `unit_012_control_loop.md` → `UNIT-012`
+- Child: `unit_012.03_pid_controller.md` → `UNIT-012.03`
 
-Top-level IDs use 3-digit padding (`NNN`). Each child level uses 2-digit padding (`.NN`).
+Top-level IDs use 3-digit padding (`NNN`). Children use 2-digit padding (`.NN`). Hierarchy is limited to two levels.
 
 ## Bidirectional Links
 

@@ -21,8 +21,9 @@ A design unit might be a hardware module, a source file, a library, or a logical
 ## Conventions
 
 - **Naming:** `unit_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
-- **Create new:** `.syskit/scripts/new-unit.sh <name>`
-- **Cross-references:** Use `UNIT-NNN` identifiers (derived from filename)
+- **Child units:** `unit_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `unit_002.01_pid_controller.md`)
+- **Create new:** `.syskit/scripts/new-unit.sh <name>` or `.syskit/scripts/new-unit.sh --parent UNIT-NNN <name>`
+- **Cross-references:** Use `UNIT-NNN` or `UNIT-NNN.NN` identifiers (derived from filename)
 - **Traceability:** Source files link back via `Spec-ref` comments; use `impl-stamp.sh` to keep hashes current
 
 ## Framework Documents

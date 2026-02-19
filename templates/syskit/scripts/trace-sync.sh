@@ -26,45 +26,32 @@ declare -A ID_TO_FILE    # ID -> full file path
 declare -A ID_TO_NAME    # ID -> human-readable name from H1
 declare -A ALL_IDS       # ID -> 1
 
-# Regex pattern for hierarchical requirement IDs: REQ-NNN or REQ-NNN.NN[.NN...]
-REQ_PAT='REQ-[0-9]{3}(\.[0-9]{2})*'
+# Regex patterns for hierarchical IDs: XXX-NNN or XXX-NNN.NN
+REQ_PAT='REQ-[0-9]{3}(\.[0-9]{2})?'
+INT_PAT='INT-[0-9]{3}(\.[0-9]{2})?'
+UNIT_PAT='UNIT-[0-9]{3}(\.[0-9]{2})?'
 
 build_id_map() {
     local tag dir prefix entry base num id name
-    # Scan INT and UNIT (flat numbering)
-    for entry in "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT"; do
+    # Scan all document types (supports hierarchical numbering: XXX-NNN or XXX-NNN.NN)
+    for entry in "req:$REQ_DIR:REQ" "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT"; do
         IFS=':' read -r tag dir prefix <<< "$entry"
         [ -d "$dir" ] || continue
-        for f in "$dir"/${tag}_[0-9][0-9][0-9]_*.md; do
+        for f in "$dir"/${tag}_*.md; do
             [ -f "$f" ] || continue
             base=$(basename "$f")
             [[ "$base" == *_000_template* ]] && continue
-            num=$(echo "$base" | sed "s/${tag}_\([0-9][0-9][0-9]\)_.*/\1/")
-            id="${prefix}-${num}"
-            ID_TO_FILE["$id"]="$f"
-            ALL_IDS["$id"]=1
-            name=$(head -1 "$f" | sed "s/^# *${prefix}-${num}: *//")
-            ID_TO_NAME["$id"]="$name"
-        done
-    done
-
-    # Scan REQ (supports hierarchical numbering: REQ-001, REQ-001.05, etc.)
-    if [ -d "$REQ_DIR" ]; then
-        for f in "$REQ_DIR"/req_*.md; do
-            [ -f "$f" ] || continue
-            base=$(basename "$f")
-            [[ "$base" == *_000_template* ]] && continue
-            # Match req_NNN_name.md or req_NNN.NN[.NN...]_name.md
-            if [[ "$base" =~ ^req_([0-9]{3}(\.[0-9]{2})*)_.+\.md$ ]]; then
+            # Match tag_NNN_name.md or tag_NNN.NN_name.md
+            if [[ "$base" =~ ^${tag}_([0-9]{3}(\.[0-9]{2})?)_.+\.md$ ]]; then
                 num="${BASH_REMATCH[1]}"
-                id="REQ-${num}"
+                id="${prefix}-${num}"
                 ID_TO_FILE["$id"]="$f"
                 ALL_IDS["$id"]=1
-                name=$(head -1 "$f" | sed "s/^# *REQ-${num}: *//")
+                name=$(head -1 "$f" | sed "s/^# *${prefix}-${num}: *//")
                 ID_TO_NAME["$id"]="$name"
             fi
         done
-    fi
+    done
 }
 
 # ─── Reference Storage ─────────────────────────────────────────────
@@ -106,10 +93,10 @@ parse_all() {
         file="${ID_TO_FILE[$id]}"
         case "$id" in
             REQ-*)
-                for x in $(section_ids "$file" "## Allocated To" 2 "UNIT-[0-9]{3}"); do
+                for x in $(section_ids "$file" "## Allocated To" 2 "$UNIT_PAT"); do
                     add_ref req_alloc "$id" "$x"
                 done
-                for x in $(section_ids "$file" "## Interfaces" 2 "INT-[0-9]{3}"); do
+                for x in $(section_ids "$file" "## Interfaces" 2 "$INT_PAT"); do
                     add_ref req_iface "$id" "$x"
                 done
                 ;;
@@ -117,19 +104,19 @@ parse_all() {
                 for x in $(section_ids "$file" "## Implements Requirements" 2 "$REQ_PAT"); do
                     add_ref unit_impl "$id" "$x"
                 done
-                for x in $(section_ids "$file" "### Provides" 3 "INT-[0-9]{3}"); do
+                for x in $(section_ids "$file" "### Provides" 3 "$INT_PAT"); do
                     add_ref unit_prov "$id" "$x"
                 done
-                for x in $(section_ids "$file" "### Consumes" 3 "INT-[0-9]{3}"); do
+                for x in $(section_ids "$file" "### Consumes" 3 "$INT_PAT"); do
                     add_ref unit_cons "$id" "$x"
                 done
                 ;;
             INT-*)
                 parties=$(section_lines "$file" "## Parties" 2)
-                for x in $(echo "$parties" | grep -i 'Provider' | grep -oE 'UNIT-[0-9]{3}' || true); do
+                for x in $(echo "$parties" | grep -i 'Provider' | grep -oE "$UNIT_PAT" || true); do
                     add_ref int_prov "$id" "$x"
                 done
-                for x in $(echo "$parties" | grep -i 'Consumer' | grep -oE 'UNIT-[0-9]{3}' || true); do
+                for x in $(echo "$parties" | grep -i 'Consumer' | grep -oE "$UNIT_PAT" || true); do
                     add_ref int_cons "$id" "$x"
                 done
                 for x in $(section_ids "$file" "## Referenced By" 2 "$REQ_PAT"); do

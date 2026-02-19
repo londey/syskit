@@ -15,10 +15,9 @@ fi
 NAME="${1:-}"
 
 if [ -z "$NAME" ]; then
-    echo "Usage: new-req.sh [--parent REQ-NNN[.NN...]] <requirement_name>"
+    echo "Usage: new-req.sh [--parent REQ-NNN] <requirement_name>"
     echo "Example: new-req.sh spi_interface"
     echo "Example: new-req.sh --parent REQ-001 spi_voltage_levels"
-    echo "Example: new-req.sh --parent REQ-001.03 spi_clock_timing"
     exit 1
 fi
 
@@ -33,8 +32,8 @@ if [ -n "$PARENT" ]; then
     # Extract numeric prefix from parent ID (e.g., REQ-004 → 004, REQ-004.01 → 004.01)
     PARENT_NUM=$(echo "$PARENT" | sed 's/^REQ-//')
 
-    if ! [[ "$PARENT_NUM" =~ ^[0-9]{3}(\.[0-9]{2})*$ ]]; then
-        echo "Error: invalid parent ID '$PARENT' (expected REQ-NNN or REQ-NNN.NN[.NN...])" >&2
+    if ! [[ "$PARENT_NUM" =~ ^[0-9]{3}$ ]]; then
+        echo "Error: invalid parent ID '$PARENT' (expected REQ-NNN)" >&2
         exit 1
     fi
 

@@ -163,12 +163,14 @@ Helper scripts:
 .syskit/scripts/new-req.sh <name>
 .syskit/scripts/new-req.sh --parent REQ-004 <name>
 .syskit/scripts/new-int.sh <name>
+.syskit/scripts/new-int.sh --parent INT-005 <name>
 .syskit/scripts/new-unit.sh <name>
+.syskit/scripts/new-unit.sh --parent UNIT-002 <name>
 ```
 
 ## Cross-References
 
-Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN` identifiers when referencing between documents.
+Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN` identifiers (or `REQ-NNN.NN`, `INT-NNN.NN`, `UNIT-NNN.NN` for children) when referencing between documents.
 
 For detailed cross-reference rules and the sync tool, see `.syskit/ref/cross-references.md`.
 
@@ -1112,11 +1114,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 INT_DIR="$PROJECT_ROOT/doc/interfaces"
 
-NAME=$1
+PARENT=""
+if [ "${1:-}" = "--parent" ]; then
+    PARENT="$2"
+    shift 2
+fi
+
+NAME="${1:-}"
 
 if [ -z "$NAME" ]; then
-    echo "Usage: new-int.sh <interface_name>"
+    echo "Usage: new-int.sh [--parent INT-NNN] <interface_name>"
     echo "Example: new-int.sh register_map"
+    echo "Example: new-int.sh --parent INT-003 uart_registers"
     exit 1
 fi
 
@@ -1125,22 +1134,59 @@ NAME=$(echo "$NAME" | tr '[:upper:]' '[:lower:]' | tr ' -' '_')
 
 mkdir -p "$INT_DIR"
 
-# Find next available number
-NEXT_NUM=1
-for f in "$INT_DIR"/int_[0-9][0-9][0-9]_*.md; do
-    if [ -f "$f" ]; then
-        NUM=$(basename "$f" | sed 's/int_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
-        NUM=${NUM:-0}  # Default to 0 if empty
-        if [ "$NUM" -ge "$NEXT_NUM" ]; then
-            NEXT_NUM=$((NUM + 1))
-        fi
-    fi
-done
+if [ -n "$PARENT" ]; then
+    # ─── Child interface: INT-NNN.NN under parent ──────────────
 
-NUM_PADDED=$(printf "%03d" $NEXT_NUM)
-FILENAME="int_${NUM_PADDED}_${NAME}.md"
-FILEPATH="$INT_DIR/$FILENAME"
-ID="INT-${NUM_PADDED}"
+    # Extract numeric prefix from parent ID (e.g., INT-005 → 005)
+    PARENT_NUM=$(echo "$PARENT" | sed 's/^INT-//')
+
+    if ! [[ "$PARENT_NUM" =~ ^[0-9]{3}$ ]]; then
+        echo "Error: invalid parent ID '$PARENT' (expected INT-NNN)" >&2
+        exit 1
+    fi
+
+    # Warn if parent file doesn't exist
+    PARENT_FILE=$(find "$INT_DIR" -maxdepth 1 -name "int_${PARENT_NUM}_*.md" -print -quit 2>/dev/null)
+    if [ -z "$PARENT_FILE" ]; then
+        echo "Warning: parent $PARENT has no matching file in $INT_DIR" >&2
+    fi
+
+    # Find next available child number under this parent
+    NEXT_CHILD=1
+    for f in "$INT_DIR"/int_${PARENT_NUM}.[0-9][0-9]_*.md; do
+        if [ -f "$f" ]; then
+            CHILD_NUM=$(basename "$f" | sed "s/int_${PARENT_NUM}\.\([0-9][0-9]\)_.*/\1/" | sed 's/^0*//')
+            CHILD_NUM=${CHILD_NUM:-0}
+            if [ "$CHILD_NUM" -ge "$NEXT_CHILD" ]; then
+                NEXT_CHILD=$((CHILD_NUM + 1))
+            fi
+        fi
+    done
+
+    CHILD_PADDED=$(printf "%02d" $NEXT_CHILD)
+    NUM_PART="${PARENT_NUM}.${CHILD_PADDED}"
+    FILENAME="int_${NUM_PART}_${NAME}.md"
+    FILEPATH="$INT_DIR/$FILENAME"
+    ID="INT-${NUM_PART}"
+else
+    # ─── Top-level interface: INT-NNN ──────────────────────────
+
+    NEXT_NUM=1
+    for f in "$INT_DIR"/int_[0-9][0-9][0-9]_*.md; do
+        if [ -f "$f" ]; then
+            NUM=$(basename "$f" | sed 's/int_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
+            NUM=${NUM:-0}  # Default to 0 if empty
+            if [ "$NUM" -ge "$NEXT_NUM" ]; then
+                NEXT_NUM=$((NUM + 1))
+            fi
+        fi
+    done
+
+    NUM_PADDED=$(printf "%03d" $NEXT_NUM)
+    FILENAME="int_${NUM_PADDED}_${NAME}.md"
+    FILEPATH="$INT_DIR/$FILENAME"
+    ID="INT-${NUM_PADDED}"
+fi
 
 if [ -f "$FILEPATH" ]; then
     echo "Error: $FILEPATH already exists"
@@ -1216,10 +1262,9 @@ fi
 NAME="${1:-}"
 
 if [ -z "$NAME" ]; then
-    echo "Usage: new-req.sh [--parent REQ-NNN[.NN...]] <requirement_name>"
+    echo "Usage: new-req.sh [--parent REQ-NNN] <requirement_name>"
     echo "Example: new-req.sh spi_interface"
     echo "Example: new-req.sh --parent REQ-001 spi_voltage_levels"
-    echo "Example: new-req.sh --parent REQ-001.03 spi_clock_timing"
     exit 1
 fi
 
@@ -1234,8 +1279,8 @@ if [ -n "$PARENT" ]; then
     # Extract numeric prefix from parent ID (e.g., REQ-004 → 004, REQ-004.01 → 004.01)
     PARENT_NUM=$(echo "$PARENT" | sed 's/^REQ-//')
 
-    if ! [[ "$PARENT_NUM" =~ ^[0-9]{3}(\.[0-9]{2})*$ ]]; then
-        echo "Error: invalid parent ID '$PARENT' (expected REQ-NNN or REQ-NNN.NN[.NN...])" >&2
+    if ! [[ "$PARENT_NUM" =~ ^[0-9]{3}$ ]]; then
+        echo "Error: invalid parent ID '$PARENT' (expected REQ-NNN)" >&2
         exit 1
     fi
 
@@ -1349,11 +1394,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 UNIT_DIR="$PROJECT_ROOT/doc/design"
 
-NAME=$1
+PARENT=""
+if [ "${1:-}" = "--parent" ]; then
+    PARENT="$2"
+    shift 2
+fi
+
+NAME="${1:-}"
 
 if [ -z "$NAME" ]; then
-    echo "Usage: new-unit.sh <unit_name>"
+    echo "Usage: new-unit.sh [--parent UNIT-NNN] <unit_name>"
     echo "Example: new-unit.sh spi_slave"
+    echo "Example: new-unit.sh --parent UNIT-002 pid_controller"
     exit 1
 fi
 
@@ -1362,22 +1414,59 @@ NAME=$(echo "$NAME" | tr '[:upper:]' '[:lower:]' | tr ' -' '_')
 
 mkdir -p "$UNIT_DIR"
 
-# Find next available number
-NEXT_NUM=1
-for f in "$UNIT_DIR"/unit_[0-9][0-9][0-9]_*.md; do
-    if [ -f "$f" ]; then
-        NUM=$(basename "$f" | sed 's/unit_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
-        NUM=${NUM:-0}  # Default to 0 if empty
-        if [ "$NUM" -ge "$NEXT_NUM" ]; then
-            NEXT_NUM=$((NUM + 1))
-        fi
-    fi
-done
+if [ -n "$PARENT" ]; then
+    # ─── Child unit: UNIT-NNN.NN under parent ──────────────
 
-NUM_PADDED=$(printf "%03d" $NEXT_NUM)
-FILENAME="unit_${NUM_PADDED}_${NAME}.md"
-FILEPATH="$UNIT_DIR/$FILENAME"
-ID="UNIT-${NUM_PADDED}"
+    # Extract numeric prefix from parent ID (e.g., UNIT-002 → 002)
+    PARENT_NUM=$(echo "$PARENT" | sed 's/^UNIT-//')
+
+    if ! [[ "$PARENT_NUM" =~ ^[0-9]{3}$ ]]; then
+        echo "Error: invalid parent ID '$PARENT' (expected UNIT-NNN)" >&2
+        exit 1
+    fi
+
+    # Warn if parent file doesn't exist
+    PARENT_FILE=$(find "$UNIT_DIR" -maxdepth 1 -name "unit_${PARENT_NUM}_*.md" -print -quit 2>/dev/null)
+    if [ -z "$PARENT_FILE" ]; then
+        echo "Warning: parent $PARENT has no matching file in $UNIT_DIR" >&2
+    fi
+
+    # Find next available child number under this parent
+    NEXT_CHILD=1
+    for f in "$UNIT_DIR"/unit_${PARENT_NUM}.[0-9][0-9]_*.md; do
+        if [ -f "$f" ]; then
+            CHILD_NUM=$(basename "$f" | sed "s/unit_${PARENT_NUM}\.\([0-9][0-9]\)_.*/\1/" | sed 's/^0*//')
+            CHILD_NUM=${CHILD_NUM:-0}
+            if [ "$CHILD_NUM" -ge "$NEXT_CHILD" ]; then
+                NEXT_CHILD=$((CHILD_NUM + 1))
+            fi
+        fi
+    done
+
+    CHILD_PADDED=$(printf "%02d" $NEXT_CHILD)
+    NUM_PART="${PARENT_NUM}.${CHILD_PADDED}"
+    FILENAME="unit_${NUM_PART}_${NAME}.md"
+    FILEPATH="$UNIT_DIR/$FILENAME"
+    ID="UNIT-${NUM_PART}"
+else
+    # ─── Top-level unit: UNIT-NNN ──────────────────────────
+
+    NEXT_NUM=1
+    for f in "$UNIT_DIR"/unit_[0-9][0-9][0-9]_*.md; do
+        if [ -f "$f" ]; then
+            NUM=$(basename "$f" | sed 's/unit_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
+            NUM=${NUM:-0}  # Default to 0 if empty
+            if [ "$NUM" -ge "$NEXT_NUM" ]; then
+                NEXT_NUM=$((NUM + 1))
+            fi
+        fi
+    done
+
+    NUM_PADDED=$(printf "%03d" $NEXT_NUM)
+    FILENAME="unit_${NUM_PADDED}_${NAME}.md"
+    FILEPATH="$UNIT_DIR/$FILENAME"
+    ID="UNIT-${NUM_PADDED}"
+fi
 
 if [ -f "$FILEPATH" ]; then
     echo "Error: $FILEPATH already exists"
@@ -1627,45 +1716,32 @@ declare -A ID_TO_FILE    # ID -> full file path
 declare -A ID_TO_NAME    # ID -> human-readable name from H1
 declare -A ALL_IDS       # ID -> 1
 
-# Regex pattern for hierarchical requirement IDs: REQ-NNN or REQ-NNN.NN[.NN...]
-REQ_PAT='REQ-[0-9]{3}(\.[0-9]{2})*'
+# Regex patterns for hierarchical IDs: XXX-NNN or XXX-NNN.NN
+REQ_PAT='REQ-[0-9]{3}(\.[0-9]{2})?'
+INT_PAT='INT-[0-9]{3}(\.[0-9]{2})?'
+UNIT_PAT='UNIT-[0-9]{3}(\.[0-9]{2})?'
 
 build_id_map() {
     local tag dir prefix entry base num id name
-    # Scan INT and UNIT (flat numbering)
-    for entry in "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT"; do
+    # Scan all document types (supports hierarchical numbering: XXX-NNN or XXX-NNN.NN)
+    for entry in "req:$REQ_DIR:REQ" "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT"; do
         IFS=':' read -r tag dir prefix <<< "$entry"
         [ -d "$dir" ] || continue
-        for f in "$dir"/${tag}_[0-9][0-9][0-9]_*.md; do
+        for f in "$dir"/${tag}_*.md; do
             [ -f "$f" ] || continue
             base=$(basename "$f")
             [[ "$base" == *_000_template* ]] && continue
-            num=$(echo "$base" | sed "s/${tag}_\([0-9][0-9][0-9]\)_.*/\1/")
-            id="${prefix}-${num}"
-            ID_TO_FILE["$id"]="$f"
-            ALL_IDS["$id"]=1
-            name=$(head -1 "$f" | sed "s/^# *${prefix}-${num}: *//")
-            ID_TO_NAME["$id"]="$name"
-        done
-    done
-
-    # Scan REQ (supports hierarchical numbering: REQ-001, REQ-001.05, etc.)
-    if [ -d "$REQ_DIR" ]; then
-        for f in "$REQ_DIR"/req_*.md; do
-            [ -f "$f" ] || continue
-            base=$(basename "$f")
-            [[ "$base" == *_000_template* ]] && continue
-            # Match req_NNN_name.md or req_NNN.NN[.NN...]_name.md
-            if [[ "$base" =~ ^req_([0-9]{3}(\.[0-9]{2})*)_.+\.md$ ]]; then
+            # Match tag_NNN_name.md or tag_NNN.NN_name.md
+            if [[ "$base" =~ ^${tag}_([0-9]{3}(\.[0-9]{2})?)_.+\.md$ ]]; then
                 num="${BASH_REMATCH[1]}"
-                id="REQ-${num}"
+                id="${prefix}-${num}"
                 ID_TO_FILE["$id"]="$f"
                 ALL_IDS["$id"]=1
-                name=$(head -1 "$f" | sed "s/^# *REQ-${num}: *//")
+                name=$(head -1 "$f" | sed "s/^# *${prefix}-${num}: *//")
                 ID_TO_NAME["$id"]="$name"
             fi
         done
-    fi
+    done
 }
 
 # ─── Reference Storage ─────────────────────────────────────────────
@@ -1707,10 +1783,10 @@ parse_all() {
         file="${ID_TO_FILE[$id]}"
         case "$id" in
             REQ-*)
-                for x in $(section_ids "$file" "## Allocated To" 2 "UNIT-[0-9]{3}"); do
+                for x in $(section_ids "$file" "## Allocated To" 2 "$UNIT_PAT"); do
                     add_ref req_alloc "$id" "$x"
                 done
-                for x in $(section_ids "$file" "## Interfaces" 2 "INT-[0-9]{3}"); do
+                for x in $(section_ids "$file" "## Interfaces" 2 "$INT_PAT"); do
                     add_ref req_iface "$id" "$x"
                 done
                 ;;
@@ -1718,19 +1794,19 @@ parse_all() {
                 for x in $(section_ids "$file" "## Implements Requirements" 2 "$REQ_PAT"); do
                     add_ref unit_impl "$id" "$x"
                 done
-                for x in $(section_ids "$file" "### Provides" 3 "INT-[0-9]{3}"); do
+                for x in $(section_ids "$file" "### Provides" 3 "$INT_PAT"); do
                     add_ref unit_prov "$id" "$x"
                 done
-                for x in $(section_ids "$file" "### Consumes" 3 "INT-[0-9]{3}"); do
+                for x in $(section_ids "$file" "### Consumes" 3 "$INT_PAT"); do
                     add_ref unit_cons "$id" "$x"
                 done
                 ;;
             INT-*)
                 parties=$(section_lines "$file" "## Parties" 2)
-                for x in $(echo "$parties" | grep -i 'Provider' | grep -oE 'UNIT-[0-9]{3}' || true); do
+                for x in $(echo "$parties" | grep -i 'Provider' | grep -oE "$UNIT_PAT" || true); do
                     add_ref int_prov "$id" "$x"
                 done
-                for x in $(echo "$parties" | grep -i 'Consumer' | grep -oE 'UNIT-[0-9]{3}' || true); do
+                for x in $(echo "$parties" | grep -i 'Consumer' | grep -oE "$UNIT_PAT" || true); do
                     add_ref int_cons "$id" "$x"
                 done
                 for x in $(section_ids "$file" "## Referenced By" 2 "$REQ_PAT"); do
@@ -2555,21 +2631,26 @@ cat > ".syskit/ref/cross-references.md" << '__SYSKIT_TEMPLATE_END__'
 ## Identifiers
 
 - `REQ-001` — Requirement 001 (top-level)
-- `REQ-001.03` — Requirement 001.03 (child of REQ-001)
-- `INT-005` — Interface 005
-- `UNIT-012` — Design unit 012
+- `REQ-001.03` — Requirement 001, child 03
+- `INT-005` — Interface 005 (top-level)
+- `INT-005.01` — Interface 005, child 01
+- `UNIT-012` — Design unit 012 (top-level)
+- `UNIT-012.03` — Design unit 012, child 03
 
-Identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`
+Identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`, `int_005.01_uart.md` → `INT-005.01`, `unit_012.03_pid.md` → `UNIT-012.03`
 
-## Hierarchical Requirement Numbering
+## Hierarchical Numbering
 
-Child requirements use dot-notation to show their parent relationship:
+All document types support two-level hierarchy using dot-notation. Child documents use `NNN.NN` to show their parent:
 
 - Top-level: `req_004_motor_control.md` → `REQ-004`
 - Child: `req_004.01_voltage_levels.md` → `REQ-004.01`
-- Grandchild: `req_004.01.03_overvoltage_protection.md` → `REQ-004.01.03`
+- Top-level: `int_005_peripheral_bus.md` → `INT-005`
+- Child: `int_005.01_uart_registers.md` → `INT-005.01`
+- Top-level: `unit_012_control_loop.md` → `UNIT-012`
+- Child: `unit_012.03_pid_controller.md` → `UNIT-012.03`
 
-Top-level IDs use 3-digit padding (`NNN`). Each child level uses 2-digit padding (`.NN`).
+Top-level IDs use 3-digit padding (`NNN`). Children use 2-digit padding (`.NN`). Hierarchy is limited to two levels.
 
 ## Bidirectional Links
 
@@ -2784,9 +2865,11 @@ Explain the naming convention:
 - `req_001_motor_control.md` → referenced as `REQ-001`
 - `req_001.01_torque_limit.md` → referenced as `REQ-001.01` (child of REQ-001)
 - `int_002_spi_bus.md` → referenced as `INT-002`
+- `int_002.01_uart_registers.md` → referenced as `INT-002.01` (child of INT-002)
 - `unit_003_pwm_driver.md` → referenced as `UNIT-003`
+- `unit_003.01_pid_controller.md` → referenced as `UNIT-003.01` (child of UNIT-003)
 
-Explain that requirements support hierarchical numbering — child requirements use dot-notation (e.g., `REQ-001.03`) so the parent relationship is visible from the ID itself.
+Explain that all document types support two-level hierarchy — child documents use dot-notation (e.g., `REQ-001.03`, `INT-002.01`, `UNIT-003.01`) so the parent relationship is visible from the ID itself.
 
 Explain that these documents cross-reference each other to create a traceability web:
 - Requirements reference the interfaces they use and the design units that implement them
@@ -2896,7 +2979,7 @@ Provide a brief inventory of existing documents:
 
 Explain the conventions this project uses:
 
-1. **Naming:** `req_NNN_name.md` → `REQ-NNN` (child requirements: `req_NNN.NN_name.md` → `REQ-NNN.NN`), `int_NNN_name.md` → `INT-NNN`, `unit_NNN_name.md` → `UNIT-NNN`
+1. **Naming:** `req_NNN_name.md` → `REQ-NNN`, `int_NNN_name.md` → `INT-NNN`, `unit_NNN_name.md` → `UNIT-NNN` (children use dot-notation: `req_NNN.NN_name.md` → `REQ-NNN.NN`, `int_NNN.NN_name.md` → `INT-NNN.NN`, `unit_NNN.NN_name.md` → `UNIT-NNN.NN`)
 2. **Cross-references:** Documents link to each other using these IDs to create traceability:
    - Requirements → Interfaces they use, Design Units that implement them
    - Design Units → Requirements they satisfy, Interfaces they provide/consume
@@ -2912,9 +2995,9 @@ Walk through how to make changes in this project:
 4. **`/syskit-implement`** — Executes tasks one by one with verification.
 
 Also mention helper scripts for creating new documents:
-- `.syskit/scripts/new-req.sh <name>` — Create a new requirement
-- `.syskit/scripts/new-int.sh <name>` — Create a new interface
-- `.syskit/scripts/new-unit.sh <name>` — Create a new design unit
+- `.syskit/scripts/new-req.sh <name>` — Create a new requirement (use `--parent REQ-NNN` for child)
+- `.syskit/scripts/new-int.sh <name>` — Create a new interface (use `--parent INT-NNN` for child)
+- `.syskit/scripts/new-unit.sh <name>` — Create a new design unit (use `--parent UNIT-NNN` for child)
 
 ### Step 5B: Offer Next Steps
 
@@ -4215,8 +4298,9 @@ Interface types:
 ## Conventions
 
 - **Naming:** `int_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
-- **Create new:** `.syskit/scripts/new-int.sh <name>`
-- **Cross-references:** Use `INT-NNN` identifiers (derived from filename)
+- **Child interfaces:** `int_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `int_005.01_uart_registers.md`)
+- **Create new:** `.syskit/scripts/new-int.sh <name>` or `.syskit/scripts/new-int.sh --parent INT-NNN <name>`
+- **Cross-references:** Use `INT-NNN` or `INT-NNN.NN` identifiers (derived from filename)
 - **Parties:** Each interface has a Provider and one or more Consumers
 
 ## Table of Contents
@@ -4252,8 +4336,9 @@ A design unit might be a hardware module, a source file, a library, or a logical
 ## Conventions
 
 - **Naming:** `unit_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
-- **Create new:** `.syskit/scripts/new-unit.sh <name>`
-- **Cross-references:** Use `UNIT-NNN` identifiers (derived from filename)
+- **Child units:** `unit_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `unit_002.01_pid_controller.md`)
+- **Create new:** `.syskit/scripts/new-unit.sh <name>` or `.syskit/scripts/new-unit.sh --parent UNIT-NNN <name>`
+- **Cross-references:** Use `UNIT-NNN` or `UNIT-NNN.NN` identifiers (derived from filename)
 - **Traceability:** Source files link back via `Spec-ref` comments; use `impl-stamp.sh` to keep hashes current
 
 ## Framework Documents

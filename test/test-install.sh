@@ -293,6 +293,42 @@ else
 fi
 
 echo ""
+echo "Testing new-int.sh --parent flag..."
+
+# Create a child interface with --parent (hierarchical numbering: INT-001.01)
+if .syskit/scripts/new-int.sh --parent INT-001 child_interface > /dev/null; then
+    if [ -f doc/interfaces/int_001.01_child_interface.md ]; then
+        if grep -q "INT-001.01" doc/interfaces/int_001.01_child_interface.md; then
+            pass "new-int.sh --parent creates hierarchical child (INT-001.01)"
+        else
+            fail "new-int.sh --parent did not set correct ID in file"
+        fi
+    else
+        fail "new-int.sh --parent did not create hierarchical filename (expected int_001.01_child_interface.md)"
+    fi
+else
+    fail "new-int.sh --parent failed"
+fi
+
+echo ""
+echo "Testing new-unit.sh --parent flag..."
+
+# Create a child unit with --parent (hierarchical numbering: UNIT-001.01)
+if .syskit/scripts/new-unit.sh --parent UNIT-001 child_unit > /dev/null; then
+    if [ -f doc/design/unit_001.01_child_unit.md ]; then
+        if grep -q "UNIT-001.01" doc/design/unit_001.01_child_unit.md; then
+            pass "new-unit.sh --parent creates hierarchical child (UNIT-001.01)"
+        else
+            fail "new-unit.sh --parent did not set correct ID in file"
+        fi
+    else
+        fail "new-unit.sh --parent did not create hierarchical filename (expected unit_001.01_child_unit.md)"
+    fi
+else
+    fail "new-unit.sh --parent failed"
+fi
+
+echo ""
 echo "Testing impl-check and impl-stamp..."
 
 # Set up: edit unit_001's ## Implementation section to list a source file

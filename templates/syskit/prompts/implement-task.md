@@ -2,6 +2,8 @@
 
 You are implementing a single task from a syskit implementation plan.
 
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
+
 ## Your Assignment
 
 - **Task file:** `{{TASK_FILE}}`

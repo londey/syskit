@@ -2,6 +2,8 @@
 
 You are reviewing proposed specification changes for quality.
 
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
+
 Read all modified files listed in `{{ANALYSIS_FOLDER}}/proposed_changes.md` from the `doc/` directories.
 
 Check each modified document for:

@@ -2,6 +2,8 @@
 
 You are analyzing the impact of a proposed change on specification documents.
 
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
+
 ## Proposed Change
 
 {{PROPOSED_CHANGE}}
@@ -73,12 +75,6 @@ You are analyzing the impact of a proposed change on specification documents.
    - **Impact:** <what specifically is affected>
    - **Action Required:** <modify/review/no change>
 
-   ## Unaffected Documents
-
-   | Document | ID | Reason Unaffected |
-   |----------|-----|-------------------|
-   | <filename> | <ID> | <brief reason> |
-
    ## Summary
 
    - **Total Documents:** <n>
@@ -94,6 +90,7 @@ You are analyzing the impact of a proposed change on specification documents.
    ```
 
    If a category has no documents, include the heading with "None." underneath.
+   Do not list individual unaffected documents — the summary counts are sufficient.
 
 5. After writing the file, return ONLY this compact summary (nothing else):
 

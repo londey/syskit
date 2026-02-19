@@ -1934,6 +1934,8 @@ cat > ".syskit/prompts/impact-analysis.md" << '__SYSKIT_TEMPLATE_END__'
 
 You are analyzing the impact of a proposed change on specification documents.
 
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
+
 ## Proposed Change
 
 {{PROPOSED_CHANGE}}
@@ -2005,12 +2007,6 @@ You are analyzing the impact of a proposed change on specification documents.
    - **Impact:** <what specifically is affected>
    - **Action Required:** <modify/review/no change>
 
-   ## Unaffected Documents
-
-   | Document | ID | Reason Unaffected |
-   |----------|-----|-------------------|
-   | <filename> | <ID> | <brief reason> |
-
    ## Summary
 
    - **Total Documents:** <n>
@@ -2026,6 +2022,7 @@ You are analyzing the impact of a proposed change on specification documents.
    ```
 
    If a category has no documents, include the heading with "None." underneath.
+   Do not list individual unaffected documents — the summary counts are sufficient.
 
 5. After writing the file, return ONLY this compact summary (nothing else):
 
@@ -2045,6 +2042,8 @@ cat > ".syskit/prompts/implement-task.md" << '__SYSKIT_TEMPLATE_END__'
 # Implement Task — Subagent Instructions
 
 You are implementing a single task from a syskit implementation plan.
+
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
 
 ## Your Assignment
 
@@ -2137,6 +2136,8 @@ cat > ".syskit/prompts/plan-extract.md" << '__SYSKIT_TEMPLATE_END__'
 # Plan Extraction — Subagent Instructions
 
 You are extracting implementation scope from approved specification changes.
+
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
 
 ## Instructions
 
@@ -2255,6 +2256,8 @@ cat > ".syskit/prompts/propose-chunk.md" << '__SYSKIT_TEMPLATE_END__'
 
 You are drafting and applying proposed specification changes for a subset of affected documents.
 
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
+
 ## Proposed Change
 
 {{PROPOSED_CHANGE}}
@@ -2319,6 +2322,8 @@ cat > ".syskit/prompts/propose-single.md" << '__SYSKIT_TEMPLATE_END__'
 # Propose Changes (Single) — Subagent Instructions
 
 You are drafting and applying proposed specification changes based on a completed impact analysis.
+
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
 
 ## Proposed Change
 
@@ -2395,6 +2400,8 @@ cat > ".syskit/prompts/propose-validate.md" << '__SYSKIT_TEMPLATE_END__'
 # Propose Validation — Subagent Instructions
 
 You are reviewing proposed specification changes for quality.
+
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
 
 Read all modified files listed in `{{ANALYSIS_FOLDER}}/proposed_changes.md` from the `doc/` directories.
 
@@ -2827,7 +2834,7 @@ Also create a draft staging directory: `.syskit/analysis/_draft/`
 
 Use the Task tool to launch a subagent that reads and analyzes all specification documents. This keeps the full document contents out of your context window.
 
-Launch a `general-purpose` Task agent with this prompt (substitute the actual proposed change for PROPOSED_CHANGE, and the analysis folder path for ANALYSIS_FOLDER):
+Launch a `general-purpose` Task agent with **model: sonnet** and this prompt (substitute the actual proposed change for PROPOSED_CHANGE, and the analysis folder path for ANALYSIS_FOLDER):
 
 > Read your full instructions from `.syskit/prompts/impact-analysis.md`.
 >
@@ -3025,7 +3032,7 @@ Use the Task tool to launch a subagent that reads the affected documents and des
 
 The subagent reads all needed files from disk — do NOT embed proposed_changes.md content in the prompt.
 
-Launch a `general-purpose` Task agent with this prompt (substitute ANALYSIS_FOLDER and TASK_FOLDER):
+Launch a `general-purpose` Task agent with **model: sonnet** and this prompt (substitute ANALYSIS_FOLDER and TASK_FOLDER):
 
 > Read your full instructions from `.syskit/prompts/plan-extract.md`.
 >
@@ -3139,7 +3146,7 @@ Choose the delegation strategy based on the count of affected documents:
 
 #### Step 5a: Single Subagent
 
-Launch a `general-purpose` Task agent with this prompt (substitute ANALYSIS_FOLDER and PROPOSED_CHANGE):
+Launch a `general-purpose` Task agent with **model: sonnet** and this prompt (substitute ANALYSIS_FOLDER and PROPOSED_CHANGE):
 
 > Read your full instructions from `.syskit/prompts/propose-single.md`.
 >
@@ -3155,7 +3162,7 @@ The subagent will return a summary in `PROPOSE_SUMMARY_START`/`PROPOSE_SUMMARY_E
 
 Split the affected documents into groups of at most 8, keeping related documents together (e.g., a requirement and the interface it references in the same group).
 
-For each chunk, launch a `general-purpose` Task agent with this prompt (substitute ANALYSIS_FOLDER, PROPOSED_CHANGE, CHUNK_NUMBER, and ASSIGNED_FILES):
+For each chunk, launch a `general-purpose` Task agent with **model: sonnet** and this prompt (substitute ANALYSIS_FOLDER, PROPOSED_CHANGE, CHUNK_NUMBER, and ASSIGNED_FILES):
 
 > Read your full instructions from `.syskit/prompts/propose-chunk.md`.
 >
@@ -3183,7 +3190,7 @@ After the subagent(s) return:
 2. Note any quality warnings reported
 3. If the subagent failed or returned incomplete results, tell the user and offer to re-run
 
-If the change set affects 5 or more documents, launch a validation Task agent:
+If the change set affects 5 or more documents, launch a validation Task agent with **model: haiku**:
 
 > Read your full instructions from `.syskit/prompts/propose-validate.md`.
 >

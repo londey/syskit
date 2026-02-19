@@ -2,6 +2,8 @@
 
 You are extracting implementation scope from approved specification changes.
 
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
+
 ## Instructions
 
 1. Read the change summary from: `{{ANALYSIS_FOLDER}}/proposed_changes.md`

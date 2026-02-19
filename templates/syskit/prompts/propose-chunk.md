@@ -2,6 +2,8 @@
 
 You are drafting and applying proposed specification changes for a subset of affected documents.
 
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
+
 ## Proposed Change
 
 {{PROPOSED_CHANGE}}

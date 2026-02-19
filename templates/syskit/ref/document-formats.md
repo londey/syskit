@@ -1,5 +1,19 @@
 # Document Format Reference
 
+## Document Style Principles
+
+These apply to all document types (requirements, interfaces, design units):
+
+1. **Documents are the current truth, not a changelog.** Write what the system *is*, not how it evolved. History belongs in git commits and their messages. After editing a document, re-read it — it should stand alone as the definitive reference without any narrative about previous versions.
+
+2. **No version numbers on internal documents.** Internal interfaces, requirements, and design units are versioned by git. Do not add "Version:", "v2", or revision history sections. External interfaces may reference the version of the external specification they describe (e.g., "SPI Mode 0", "PNG 1.2").
+
+3. **Keep rationale sections brief.** Rationale explains *why* a decision was made, not *what* the whole system does. Reference other `doc/` files by ID (REQ-NNN, INT-NNN, UNIT-NNN) rather than re-describing their content.
+
+4. **Cross-reference, don't duplicate.** If information is defined in another document, reference it by ID. Each fact should have one authoritative location.
+
+5. **Be concise.** Documents should be scannable. Prefer tables and lists over prose. Omit filler phrases and obvious context.
+
 ## Requirements (`req_NNN_<name>.md`)
 
 Requirements state WHAT the system must do, not HOW.

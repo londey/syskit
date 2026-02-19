@@ -18,6 +18,11 @@ You are drafting and applying proposed specification changes based on a complete
    - Make the specific modifications needed to address the proposed change
    - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
+   - **Document style rules** (critical):
+     - Write what the system *is now*, not how it changed. No changelog-style language ("previously", "was changed to", "updated from"). The git diff is the changelog.
+     - Do not add version numbers, revision history, or "Version:" fields to internal documents. Git is the version control.
+     - Keep rationale sections brief — explain *why*, don't re-describe the system. Reference other docs by ID (REQ-NNN, INT-NNN, UNIT-NNN) instead of duplicating their content.
+     - After editing, re-read the document — it should stand alone as the definitive reference.
 
 4. While editing, validate each requirement you modify or create:
    - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.

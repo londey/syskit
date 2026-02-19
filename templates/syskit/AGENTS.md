@@ -50,6 +50,18 @@ Always run impact analysis first:
 4. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <analysis-folder>`
 5. User reviews changes via `git diff doc/` and approves, revises, or rejects
 
+### Refining Changes (Iterative)
+
+Alternative to single-pass proposing, for incremental specification updates:
+
+1. Run `/syskit-refine --scope requirements` to modify requirement documents only
+2. Review and approve via `git diff doc/requirements/`
+3. Run `/syskit-impact --incremental` to re-analyze with approved changes incorporated
+4. Repeat with `--scope interfaces`, then `--scope design`
+5. Refinement state tracked in `.syskit/analysis/<folder>/refine_status.md`
+
+Use refine instead of propose when the change affects many documents and you want smaller, reviewable diffs per iteration.
+
 ### Planning Implementation
 
 After spec changes are approved:

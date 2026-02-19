@@ -92,6 +92,18 @@ Always run impact analysis first:
 4. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <analysis-folder>`
 5. User reviews changes via `git diff doc/` and approves, revises, or rejects
 
+### Refining Changes (Iterative)
+
+Alternative to single-pass proposing, for incremental specification updates:
+
+1. Run `/syskit-refine --scope requirements` to modify requirement documents only
+2. Review and approve via `git diff doc/requirements/`
+3. Run `/syskit-impact --incremental` to re-analyze with approved changes incorporated
+4. Repeat with `--scope interfaces`, then `--scope design`
+5. Refinement state tracked in `.syskit/analysis/<folder>/refine_status.md`
+
+Use refine instead of propose when the change affects many documents and you want smaller, reviewable diffs per iteration.
+
 ### Planning Implementation
 
 After spec changes are approved:
@@ -2425,6 +2437,101 @@ Issues requiring human review: <n> — <brief descriptions if any>
 VALIDATION_SUMMARY_END
 __SYSKIT_TEMPLATE_END__
 
+# --- .syskit/prompts/refine-single.md ---
+info "Creating .syskit/prompts/refine-single.md"
+cat > ".syskit/prompts/refine-single.md" << '__SYSKIT_TEMPLATE_END__'
+# Refine Changes (Scoped) — Subagent Instructions
+
+You are drafting and applying proposed specification changes for a specific scope of documents, based on a completed impact analysis.
+
+**Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
+
+## Proposed Change
+
+{{PROPOSED_CHANGE}}
+
+## Scope
+
+You are refining ONLY the following documents:
+
+{{SCOPE_FILTER}}
+
+Scope type: {{SCOPE_NAME}}
+
+## Instructions
+
+1. Read the impact analysis from: `{{ANALYSIS_FOLDER}}/impact.md`
+
+2. Read ONLY the documents listed in your scope (above) from the `doc/` directories. Do NOT read or modify documents outside your scope.
+
+3. If other refinement files exist in `{{ANALYSIS_FOLDER}}/` (e.g., `refine_requirements.md` from a previous iteration), read them to understand what changes have already been made. Your changes should be consistent with previously approved refinements.
+
+4. For each scoped document, **edit the file directly** with the proposed changes:
+   - Make the specific modifications needed to address the proposed change
+   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
+   - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
+   - When referencing documents outside your scope that are also affected (per impact.md), note that they will be refined in a later iteration — flag these in the Cross-Scope Notes section.
+
+5. While editing, validate each requirement you modify or create:
+   - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
+   - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
+   - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
+   - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
+
+6. Write a refinement summary to `{{ANALYSIS_FOLDER}}/refine_{{SCOPE_NAME}}.md` in this format:
+
+   ```markdown
+   # Refinement: {{SCOPE_NAME}}
+
+   Based on: impact.md
+   Created: <timestamp>
+   Status: Pending Approval
+
+   ## Change Summary
+
+   | Document | Type | Change Description |
+   |----------|------|-------------------|
+   | <filename> | Modify | <brief description> |
+
+   ## Document: <filename>
+
+   ### Rationale
+
+   <why this change is needed>
+
+   ### Changes Made
+
+   <brief description of what was modified — the actual diff is in git>
+
+   ### Cross-Scope Dependencies
+
+   - <references to documents in other scopes that may need updating>
+
+   ---
+
+   (repeat for each scoped document)
+
+   ## Quality Warnings
+
+   <list any requirement quality issues found, or "None.">
+
+   ## Cross-Scope Notes
+
+   <list any changes that may affect documents in other scopes, to be addressed in subsequent refine iterations or a re-run of impact analysis>
+   ```
+
+7. After editing all scoped documents and writing the summary, return ONLY this compact response (nothing else):
+
+   REFINE_SUMMARY_START
+   Scope: {{SCOPE_NAME}}
+   Documents edited: <n>
+   Files: <comma-separated filenames>
+   Quality warnings: <n> (<brief list or "None">)
+   Cross-scope notes: <n> (<brief list or "None">)
+   Summary written to: {{ANALYSIS_FOLDER}}/refine_{{SCOPE_NAME}}.md
+   REFINE_SUMMARY_END
+__SYSKIT_TEMPLATE_END__
+
 # --- .syskit/ref/cross-references.md ---
 info "Creating .syskit/ref/cross-references.md"
 cat > ".syskit/ref/cross-references.md" << '__SYSKIT_TEMPLATE_END__'
@@ -2796,8 +2903,11 @@ cat > ".claude/commands/syskit-impact.md" << '__SYSKIT_TEMPLATE_END__'
 description: Analyze impact of a proposed change across all specifications
 arguments:
   - name: change
-    description: Description of the proposed change
-    required: true
+    description: Description of the proposed change (not needed for --incremental)
+    required: false
+  - name: incremental
+    description: "Re-run impact analysis acknowledging already-approved refinements (flag, no value needed)"
+    required: false
 ---
 
 # Impact Analysis
@@ -2812,7 +2922,7 @@ $ARGUMENTS.change
 
 ### Step 0: Context Check
 
-If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, or IMPLEMENT_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
+If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, IMPLEMENT_SUMMARY, or REFINE_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
 
 "This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-impact` — all progress is saved to disk and will be picked up automatically."
 
@@ -2824,7 +2934,30 @@ Read `.syskit/manifest.md` to get the current list of all specification document
 
 Count the total number of specification documents listed (excluding any with `_000_template` in the name). You will use this count to validate the subagent's output.
 
+### Step 1.5: Check for Incremental Mode
+
+If `$ARGUMENTS.incremental` is provided (or the user's command included `--incremental`):
+
+1. Find the most recent analysis folder in `.syskit/analysis/`.
+
+2. Read the first few lines of `impact.md` in that folder to get the original proposed change description.
+
+3. Check for `refine_status.md` in the folder. If it does not exist, warn the user: "No refinement history found. Run `/syskit-refine` first, or use `/syskit-impact` without `--incremental` for a fresh analysis."
+
+4. Read the `refine_status.md` to note which scopes have been approved.
+
+5. Set the PROPOSED_CHANGE to the original change description from impact.md, appended with:
+   "NOTE: The following refinements have already been approved and applied to the doc/ files: \<list approved scopes and their document lists from refine_status.md\>. The impact analysis should reflect the CURRENT state of these documents (post-refinement) and focus on remaining unrefined documents."
+
+6. Rename the existing `impact.md` to `impact_prev.md` (for reference).
+
+7. Note the analysis folder path — you will reuse it. Skip Step 2.
+
+If `$ARGUMENTS.incremental` is NOT provided and `$ARGUMENTS.change` is empty, STOP and tell the user: "Please provide a change description: `/syskit-impact \"your change description\"`"
+
 ### Step 2: Create Analysis Folder
+
+**Skip this step if in incremental mode (Step 1.5 was executed).**
 
 Create the analysis folder: `.syskit/analysis/{{DATE}}_<change_name>/`
 
@@ -2859,9 +2992,9 @@ Do NOT read the full `impact.md` into context. Use the summary to validate.
 
 ### Step 5: Generate Snapshot
 
-Run: `.syskit/scripts/manifest-snapshot.sh .syskit/analysis/{{DATE}}_<change_name>/`
+Run: `.syskit/scripts/manifest-snapshot.sh .syskit/analysis/<folder>/`
 
-Clean up the draft staging directory:
+If NOT in incremental mode, clean up the draft staging directory:
 
 ```bash
 rm -rf .syskit/analysis/_draft/
@@ -2869,11 +3002,15 @@ rm -rf .syskit/analysis/_draft/
 
 ### Step 6: Next Step
 
-Present the summary counts to the user and tell them:
+Present the summary counts to the user.
+
+**If in incremental mode**, also show a comparison: "Previous analysis had \<n\> documents affected. After refinement: \<n\> documents now affected."
+
+Tell the user:
 
 "Impact analysis complete. Results saved to `.syskit/analysis/<folder>/impact.md`.
 
-Next step: run `/syskit-propose` to propose specific changes to the affected documents.
+Next step: run `/syskit-refine --scope <recommended_scope>` to propose changes to the next set of documents, or `/syskit-propose` to propose all changes at once.
 
 Tip: Start a new conversation before running the next command to free up context."
 __SYSKIT_TEMPLATE_END__
@@ -3022,7 +3159,19 @@ Otherwise:
 
 - Find the most recent folder in `.syskit/analysis/`
 
-Read ONLY the first ~10 lines of `proposed_changes.md` to check the `Status:` line. If status is not "Approved", prompt user to run `/syskit-propose` first.
+Check for approval status using this priority:
+
+1. If `refine_status.md` exists in the folder:
+   - Read it. Check the top-level `Status:` field.
+   - If "Complete", proceed — all scopes have been refined and approved.
+   - If "In Progress", warn the user: "Refinement is still in progress. The following scopes are not yet approved: \<list\>. Run `/syskit-refine` to complete them, or pass `--force` to plan with partial refinement."
+   - The subagent will read all `refine_<scope>.md` files for context.
+
+2. Else if `proposed_changes.md` exists:
+   - Read ONLY its first ~10 lines. Check the `Status:` line.
+   - If not "Approved", prompt user to run `/syskit-propose` first.
+
+3. If neither exists, prompt user to run `/syskit-propose` or `/syskit-refine` first.
 
 Note the analysis folder path and the change name — you will pass these to the subagent.
 
@@ -3236,6 +3385,221 @@ Next step: run `/syskit-plan` to create an implementation task breakdown.
 Tip: Start a new conversation before running the next command to free up context."
 __SYSKIT_TEMPLATE_END__
 
+# --- .claude/commands/syskit-refine.md ---
+info "Creating .claude/commands/syskit-refine.md"
+cat > ".claude/commands/syskit-refine.md" << '__SYSKIT_TEMPLATE_END__'
+---
+description: Propose scoped specification changes based on impact analysis
+arguments:
+  - name: scope
+    description: "Scope of documents to refine: 'requirements', 'interfaces', 'design', or comma-separated doc IDs (e.g., 'REQ-001,INT-003')"
+    required: true
+  - name: analysis
+    description: Name of the analysis folder (optional, uses most recent if not specified)
+    required: false
+---
+
+# Refine Specifications (Scoped)
+
+You are proposing specification changes for a targeted subset of documents, based on a completed impact analysis.
+
+## Instructions
+
+### Step 0: Context Check
+
+If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, IMPLEMENT_SUMMARY, or REFINE_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
+
+"This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-refine` — all progress is saved to disk and will be picked up automatically."
+
+If the user explicitly included `--continue` in their command, skip this check and proceed.
+
+### Step 1: Check Git Status
+
+Run `git status -- doc/` to check for uncommitted changes in the doc directory.
+
+If there are uncommitted changes in `doc/`, **stop and tell the user:**
+
+"There are uncommitted changes in `doc/`. Please commit or stash them before running `/syskit-refine`, so that proposed changes can be reviewed with `git diff` and reverted cleanly if needed."
+
+### Step 2: Load the Impact Analysis
+
+If `$ARGUMENTS.analysis` is provided:
+
+- Find the analysis folder: `.syskit/analysis/$ARGUMENTS.analysis/`
+
+Otherwise:
+
+- Find the most recent folder in `.syskit/analysis/`
+
+Read ONLY the `## Summary` section from `impact.md` (the last ~15 lines) to get document counts and the list of affected filenames. Do NOT load the full impact.md into context.
+
+Also note the proposed change description from the first few lines of impact.md.
+
+Note the analysis folder path — you will pass it to subagents.
+
+### Step 3: Check Freshness
+
+Run the freshness check script:
+
+```bash
+.syskit/scripts/manifest-check.sh .syskit/analysis/<folder>/snapshot.md
+```
+
+- If any affected documents have changed (exit code 1), warn the user
+- Recommend re-running impact analysis if changes are significant
+- Proceed with caution if user confirms
+
+### Step 4: Parse Scope and Filter Documents
+
+Parse `$ARGUMENTS.scope`:
+
+- **"requirements"**: Filter to documents with filenames matching `req_*` (REQ-NNN IDs)
+- **"interfaces"**: Filter to documents with filenames matching `int_*` (INT-NNN IDs)
+- **"design"**: Filter to documents with filenames matching `unit_*` (UNIT-NNN IDs)
+- **Comma-separated IDs** (e.g., "REQ-001,INT-003"): Filter to exactly those document IDs by matching them against filenames in the impact summary
+
+From the impact summary, identify which affected documents (Action Required of "modify" or "review") fall within the scope.
+
+If no affected documents match the scope, tell the user:
+
+"No documents with required changes match scope '$ARGUMENTS.scope'. The following scopes have pending changes: \<list scopes with pending docs\>."
+
+### Step 5: Load Refine Status
+
+Check if `.syskit/analysis/<folder>/refine_status.md` exists.
+
+If it exists, read it. Note which scopes have already been refined and approved. If the current scope is already marked "Approved", warn the user:
+
+"Scope '$ARGUMENTS.scope' was already refined and approved. Re-running will overwrite those changes. Continue? (yes/no)"
+
+If it does not exist, this is the first refinement iteration — you will create it in Step 8.
+
+### Step 6: Delegate Scoped Change Drafting
+
+Count the affected documents in scope.
+
+**8 or fewer documents (typical for scoped work):** Launch a single subagent.
+
+Launch a `general-purpose` Task agent with **model: sonnet** and this prompt (substitute ANALYSIS_FOLDER, PROPOSED_CHANGE, SCOPE_FILTER, and SCOPE_NAME with actual values):
+
+> Read your full instructions from `.syskit/prompts/refine-single.md`.
+>
+> Use these values for placeholders in the prompt file:
+> - `{{PROPOSED_CHANGE}}`: PROPOSED_CHANGE
+> - `{{ANALYSIS_FOLDER}}`: ANALYSIS_FOLDER
+> - `{{SCOPE_FILTER}}`: SCOPE_FILTER (the list of specific filenames to modify)
+> - `{{SCOPE_NAME}}`: SCOPE_NAME (e.g., "requirements", "interfaces", "design", or "custom")
+>
+> Follow the instructions in the prompt file. Return ONLY the compact summary described at the end.
+
+The subagent will return a summary in `REFINE_SUMMARY_START`/`REFINE_SUMMARY_END` format.
+
+**More than 8 documents:** Use the same chunked approach as propose — launch multiple subagents with `.syskit/prompts/propose-chunk.md`, passing only the scoped file list as `{{ASSIGNED_FILES}}`. Launch all chunk agents in parallel. After all complete, assemble results with `.syskit/scripts/assemble-chunks.sh`.
+
+### Step 7: Validate Proposed Changes
+
+After the subagent(s) return:
+
+1. Parse the summary to verify all scoped documents were edited
+2. Note any quality warnings reported
+3. If the subagent failed or returned incomplete results, tell the user and offer to re-run
+
+If the scoped change set affects 5 or more documents, launch a validation Task agent with **model: haiku**:
+
+> Read your full instructions from `.syskit/prompts/propose-validate.md`.
+>
+> Use this value for placeholders in the prompt file:
+> - `{{ANALYSIS_FOLDER}}`: ANALYSIS_FOLDER
+>
+> Follow the instructions in the prompt file. Return ONLY the compact summary described at the end.
+
+The subagent will return a summary in `VALIDATION_SUMMARY_START`/`VALIDATION_SUMMARY_END` format.
+
+### Step 8: Update Refine Status
+
+Create or update `.syskit/analysis/<folder>/refine_status.md` with the following format:
+
+```markdown
+# Refinement Status
+
+Analysis: <folder name>
+Change: <change description>
+Status: In Progress
+
+## Iterations
+
+### <scope_name> (Iteration <n>)
+- Scope: <scope description>
+- Documents: <comma-separated filenames>
+- Status: Pending Approval
+- Refinement file: refine_<scope_name>.md
+```
+
+Include all previous iterations (from any existing refine_status.md) with their current statuses. Add the current scope as a new iteration entry with `Status: Pending Approval`.
+
+Add a `## Remaining Scopes` section listing any scopes that still have affected documents not yet refined:
+
+```markdown
+## Remaining Scopes
+
+- <scope>: <n> documents with pending changes
+```
+
+Update the top-level `Status:` to "Complete" only when all affected documents across all scopes have been refined and approved.
+
+### Step 9: Present Changes for Review
+
+Tell the user:
+
+"Scoped changes for **\<scope\>** have been applied to the doc files. Review using `git diff doc/` or the VSCode source control panel.
+
+**Scope:** \<scope description\>
+**Documents modified:** \<n\>
+**Summary:**
+\<paste the change summary table from the subagent's returned summary\>
+
+**Quality warnings:** \<list any, or 'None'\>
+
+Reply with:
+- **'approve'** to keep all scoped changes
+- **'approve \<filename\>'** to keep changes to a specific file and revert others
+- **'revise \<filename\>'** to discuss modifications to a specific file
+- **'reject'** to revert all scoped changes"
+
+### Step 10: Handle Approval
+
+- **approve:** Update the current scope's Status to "Approved" in `refine_status.md`. Proceed to Step 11.
+- **approve \<filename\>:** Revert non-specified scoped files with `git checkout -- doc/<other scoped files>`, keep the specified file(s). Update status accordingly. Proceed to Step 11.
+- **revise \<filename\>:** Discuss the specific file with the user, make adjustments, then re-present for review.
+- **reject:** Run `git checkout -- <scoped files>` to revert only the scoped changes. Update scope Status to "Rejected" in `refine_status.md`.
+
+### Step 11: Next Steps
+
+After applying approved changes, check `refine_status.md` for remaining scopes with pending changes.
+
+If there are remaining scopes, tell the user:
+
+"Scoped refinement for **\<scope\>** approved.
+
+**Refinement progress:**
+\<list each scope and its status\>
+
+Recommended next steps:
+- Run `/syskit-impact --incremental` to re-analyze impacts with your approved \<scope\> changes incorporated
+- Run `/syskit-refine --scope <next_scope>` to refine the next document type
+- Run `/syskit-plan` if all refinement is complete
+
+Tip: Start a new conversation before running the next command to free up context."
+
+If all scopes are approved (top-level Status: Complete), tell the user:
+
+"All document scopes have been refined and approved.
+
+Next step: run `/syskit-plan` to create an implementation task breakdown.
+
+Tip: Start a new conversation before running the next command to free up context."
+__SYSKIT_TEMPLATE_END__
+
 # --- .syskit/templates/CLAUDE_SYSKIT.md ---
 info "Creating .syskit/templates/CLAUDE_SYSKIT.md"
 cat > ".syskit/templates/CLAUDE_SYSKIT.md" << '__SYSKIT_TEMPLATE_END__'
@@ -3255,7 +3619,8 @@ This project uses **syskit** for specification-driven development. Specification
 For non-trivial changes affecting system behavior, use the syskit workflow:
 
 1. `/syskit-impact <change>` — Analyze what specifications are affected
-2. `/syskit-propose` — Propose specification updates
+2. `/syskit-propose` — Propose all specification updates at once
+   **OR** `/syskit-refine --scope <type>` — Propose changes incrementally by document type (requirements, interfaces, design)
 3. `/syskit-plan` — Break into implementation tasks
 4. `/syskit-implement` — Execute with traceability
 

@@ -34,6 +34,8 @@ For detailed format specifications, see `.syskit/ref/document-formats.md`.
 
 ## Workflows
 
+**Important:** Always invoke syskit scripts using workspace-relative paths (e.g., `.syskit/scripts/manifest.sh`). Never expand these to absolute paths.
+
 ### Before Making Changes
 
 Always run impact analysis first:

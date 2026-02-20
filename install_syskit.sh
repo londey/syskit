@@ -76,6 +76,8 @@ For detailed format specifications, see `.syskit/ref/document-formats.md`.
 
 ## Workflows
 
+**Important:** Always invoke syskit scripts using workspace-relative paths (e.g., `.syskit/scripts/manifest.sh`). Never expand these to absolute paths.
+
 ### Before Making Changes
 
 Always run impact analysis first:
@@ -4696,5 +4698,10 @@ info "syskit installed successfully!"
 info ""
 info "Next steps:"
 info "  Run /syskit-guide for an interactive walkthrough"
+info ""
+info "To allow Claude Code to run syskit scripts without prompting,"
+info "add this to .claude/settings.local.json under permissions.allow:"
+info ""
+echo '  "Bash(.syskit/scripts/*:*)"'
 info ""
 info "See .syskit/AGENTS.md for full documentation."

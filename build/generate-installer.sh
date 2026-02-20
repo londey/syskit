@@ -225,6 +225,11 @@ info ""
 info "Next steps:"
 info "  Run /syskit-guide for an interactive walkthrough"
 info ""
+info "To allow Claude Code to run syskit scripts without prompting,"
+info "add this to .claude/settings.local.json under permissions.allow:"
+info ""
+echo '  "Bash(.syskit/scripts/*:*)"'
+info ""
 info "See .syskit/AGENTS.md for full documentation."
 SCRIPT_FOOTER
 

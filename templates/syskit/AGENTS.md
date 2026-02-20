@@ -11,6 +11,7 @@ All persistent engineering documents live under `doc/`:
 - `doc/requirements/` — What the system must do
 - `doc/interfaces/` — Contracts between components and with external systems
 - `doc/design/` — How the system accomplishes requirements
+- `ARCHITECTURE.md` — Auto-generated architecture overview with block diagram (project root)
 
 Working documents live under `.syskit/`:
 
@@ -77,7 +78,8 @@ After spec changes are approved:
 3. Run `.syskit/scripts/trace-sync.sh` to verify cross-references are consistent
 4. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
 5. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
-6. After doc changes, run `.syskit/scripts/manifest.sh` to update the manifest
+6. After doc changes, run `.syskit/scripts/arch-update.sh` to refresh ARCHITECTURE.md
+7. After doc changes, run `.syskit/scripts/manifest.sh` to update the manifest
 
 ### Context Budget Management
 
@@ -133,3 +135,13 @@ Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN` identifiers (or `REQ-NNN.NN`, `INT-NNN.NN`,
 For detailed cross-reference rules and the sync tool, see `.syskit/ref/cross-references.md`.
 
 For Spec-ref implementation traceability, see `.syskit/ref/spec-ref.md`.
+
+## Architecture Overview
+
+After adding or modifying design units, refresh the architecture overview:
+
+```bash
+.syskit/scripts/arch-update.sh
+```
+
+This updates the Mermaid block diagram and unit summary table in `ARCHITECTURE.md` between guard tags.

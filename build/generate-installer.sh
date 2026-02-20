@@ -121,6 +121,7 @@ embed_file "$TEMPLATES_DIR/doc/design/design_decisions.md" ".syskit/templates/do
 embed_file "$TEMPLATES_DIR/doc/requirements/README.md" ".syskit/templates/doc/requirements/README.md" "644" >> "$OUTPUT"
 embed_file "$TEMPLATES_DIR/doc/interfaces/README.md" ".syskit/templates/doc/interfaces/README.md" "644" >> "$OUTPUT"
 embed_file "$TEMPLATES_DIR/doc/design/README.md" ".syskit/templates/doc/design/README.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/design/ARCHITECTURE.md" ".syskit/templates/doc/design/ARCHITECTURE.md" "644" >> "$OUTPUT"
 
 # Copy templates from .syskit/templates/ to doc/
 # Copy-templates: always overwrite (users copy these, not edit originals)
@@ -150,6 +151,14 @@ do
         info "Skipping $tmpl (already exists)"
     fi
 done
+
+# ARCHITECTURE.md: only create if missing (user-owned after initial install)
+if [ ! -f "ARCHITECTURE.md" ]; then
+    info "Creating ARCHITECTURE.md"
+    cp ".syskit/templates/doc/design/ARCHITECTURE.md" "ARCHITECTURE.md"
+else
+    info "Skipping ARCHITECTURE.md (already exists)"
+fi
 COPY_TEMPLATES
 
 # Add manifest generation and completion
@@ -158,6 +167,12 @@ cat >> "$OUTPUT" << 'SCRIPT_FOOTER'
 # Update table of contents in README files
 info "Updating doc README table of contents..."
 .syskit/scripts/toc-update.sh
+
+# Update architecture diagram if ARCHITECTURE.md has guard markers
+if grep -q '<!-- syskit-arch-start -->' "ARCHITECTURE.md" 2>/dev/null; then
+    info "Updating ARCHITECTURE.md diagram..."
+    .syskit/scripts/arch-update.sh
+fi
 
 # Generate initial manifest
 info "Generating manifest..."

@@ -82,6 +82,7 @@ After spec changes are approved:
 5. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
 6. After doc changes, run `.syskit/scripts/arch-update.sh` to refresh ARCHITECTURE.md
 7. After doc changes, run `.syskit/scripts/manifest.sh` to update the manifest
+8. Run `.syskit/scripts/template-check.sh` to verify documents conform to current templates
 
 ### Context Budget Management
 
@@ -98,6 +99,18 @@ The workflow commands use subagents to keep document content out of the main con
 5. **Edit doc files directly** — Subagents edit `doc/` files in place. The user reviews via `git diff`. This eliminates the largest context consumer (full proposed content for every affected file).
 
 6. **One command per conversation** — Each syskit command persists all state to disk. Start a fresh conversation for each command to avoid context accumulation.
+
+## Template Conformance
+
+Documents may drift from their templates when templates are updated between installer runs. The template-check script verifies that all required sections are present:
+
+```bash
+.syskit/scripts/template-check.sh                  # check all documents
+.syskit/scripts/template-check.sh --type req        # check requirements only
+.syskit/scripts/template-check.sh doc/design/unit_001_core.md  # check one file
+```
+
+Exit code 0 means all documents conform; exit code 1 means missing sections were found. When editing an existing document, run the check on that file first — if the template has gained new sections since the document was written, add them before making other changes.
 
 ## Freshness Checking
 

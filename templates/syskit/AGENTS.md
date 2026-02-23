@@ -51,19 +51,26 @@ Always run impact analysis first:
 2. Create analysis folder: `.syskit/analysis/<date>_<change_name>/`
 3. Delegate change drafting to subagent(s) — subagents read impact.md from disk, edit `doc/` files directly, and write a lightweight summary to `proposed_changes.md`
 4. Generate `snapshot.md` by running: `.syskit/scripts/manifest-snapshot.sh <analysis-folder>`
-5. User reviews changes via `git diff doc/` and approves, revises, or rejects
+5. User reviews changes via `git diff doc/` and approves, refines, or rejects
 
 ### Refining Changes (Iterative)
 
-Alternative to single-pass proposing, for incremental specification updates:
+After proposing, the user may want to iterate on the proposed changes before approving:
 
-1. Run `/syskit-refine --scope requirements` to modify requirement documents only
-2. Review and approve via `git diff doc/requirements/`
-3. Run `/syskit-impact --incremental` to re-analyze with approved changes incorporated
-4. Repeat with `--scope interfaces`, then `--scope design`
-5. Refinement state tracked in `.syskit/analysis/<folder>/refine_status.md`
+1. Run `/syskit-refine --feedback "<what needs to change>"` to fix issues in the proposal
+2. Review updated changes via `git diff doc/`
+3. Repeat with additional `/syskit-refine` runs as needed (each in a new conversation)
+4. Run `/syskit-approve` when satisfied (or approve inline during propose/refine)
 
-Use refine instead of propose when the change affects many documents and you want smaller, reviewable diffs per iteration.
+Use refine to fix issues in proposed changes — wrong decisions, missing coverage, incorrect interfaces, etc.
+
+### Approving Changes
+
+Approval can happen inline (during `/syskit-propose` or `/syskit-refine`) or in a separate session:
+
+1. Run `/syskit-approve` to review and approve pending changes from any previous session
+2. The approve command reads the analysis folder, shows the current diff, and updates `proposed_changes.md` status
+3. This enables overnight reviews — propose in one session, review at your leisure, approve in another
 
 ### Planning Implementation
 

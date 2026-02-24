@@ -14,6 +14,7 @@ framework_order() {
     case "$1" in
         *requirements) echo "states_and_modes.md quality_metrics.md" ;;
         *design)       echo "design_decisions.md concept_of_execution.md" ;;
+        *verification) echo "test_strategy.md" ;;
         *)             echo "" ;;
     esac
 }
@@ -60,7 +61,7 @@ update_toc() {
 
         # Classify: numbered spec files vs framework files
         case "$base" in
-            req_[0-9][0-9][0-9]*.md | unit_[0-9][0-9][0-9]*.md | int_[0-9][0-9][0-9]*.md)
+            req_[0-9][0-9][0-9]*.md | unit_[0-9][0-9][0-9]*.md | int_[0-9][0-9][0-9]*.md | ver_[0-9][0-9][0-9]*.md)
                 numbered_entries="${numbered_entries}${entry}"
                 ;;
             *)
@@ -139,5 +140,6 @@ update_toc() {
 update_toc "doc/requirements"
 update_toc "doc/interfaces"
 update_toc "doc/design"
+update_toc "doc/verification"
 
 echo "TOC updated in doc/*/README.md"

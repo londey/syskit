@@ -8,8 +8,10 @@
 - `INT-005.01` — Interface 005, child 01
 - `UNIT-012` — Design unit 012 (top-level)
 - `UNIT-012.03` — Design unit 012, child 03
+- `VER-007` — Verification 007 (top-level)
+- `VER-007.02` — Verification 007, child 02
 
-Identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`, `int_005.01_uart.md` → `INT-005.01`, `unit_012.03_pid.md` → `UNIT-012.03`
+Identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`, `int_005.01_uart.md` → `INT-005.01`, `unit_012.03_pid.md` → `UNIT-012.03`, `ver_007_motor_test.md` → `VER-007`, `ver_007.02_edge_cases.md` → `VER-007.02`
 
 ## Hierarchical Numbering
 
@@ -21,6 +23,8 @@ All document types support two-level hierarchy using dot-notation. Child documen
 - Child: `int_005.01_uart_registers.md` → `INT-005.01`
 - Top-level: `unit_012_control_loop.md` → `UNIT-012`
 - Child: `unit_012.03_pid_controller.md` → `UNIT-012.03`
+- Top-level: `ver_007_motor_test.md` → `VER-007`
+- Child: `ver_007.02_edge_cases.md` → `VER-007.02`
 
 Top-level IDs use 3-digit padding (`NNN`). Children use 2-digit padding (`.NN`). Hierarchy is limited to two levels.
 
@@ -32,6 +36,8 @@ The following links must be maintained bidirectionally:
 - REQ "Interfaces" ↔ INT "Referenced By"
 - UNIT "Provides" ↔ INT "Parties Provider"
 - UNIT "Consumes" ↔ INT "Parties Consumer"
+- VER "Verifies Requirements" ↔ REQ "Verified By"
+- VER "Verified Design Units" ↔ UNIT "Verification"
 
 ## Cross-Reference Sync
 

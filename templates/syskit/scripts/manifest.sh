@@ -71,5 +71,6 @@ hash_directory() {
 hash_directory "doc/requirements" "Requirements"
 hash_directory "doc/interfaces" "Interfaces"
 hash_directory "doc/design" "Design"
+hash_directory "doc/verification" "Verification"
 
 echo "Manifest updated: $MANIFEST"

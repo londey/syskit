@@ -26,6 +26,7 @@ info "Creating directories..."
 mkdir -p doc/requirements
 mkdir -p doc/interfaces
 mkdir -p doc/design
+mkdir -p doc/verification
 mkdir -p .syskit/scripts
 mkdir -p .syskit/prompts
 mkdir -p .syskit/ref
@@ -34,6 +35,7 @@ mkdir -p .syskit/tasks
 mkdir -p .syskit/templates/doc/requirements
 mkdir -p .syskit/templates/doc/interfaces
 mkdir -p .syskit/templates/doc/design
+mkdir -p .syskit/templates/doc/verification
 mkdir -p .claude/commands
 
 
@@ -53,6 +55,7 @@ All persistent engineering documents live under `doc/`:
 - `doc/requirements/` — What the system must do
 - `doc/interfaces/` — Contracts between components and with external systems
 - `doc/design/` — How the system accomplishes requirements
+- `doc/verification/` — How requirements are verified
 - `ARCHITECTURE.md` — Auto-generated architecture overview with block diagram (project root)
 
 Working documents live under `.syskit/`:
@@ -71,6 +74,7 @@ Reference material for subagents:
 - **Requirements** (`req_NNN_<name>.md`) — WHAT the system must do. Use condition/response format.
 - **Interfaces** (`int_NNN_<name>.md`) — Contracts between components and external systems.
 - **Design Units** (`unit_NNN_<name>.md`) — HOW the system works. Links to requirements and interfaces.
+- **Verification** (`ver_NNN_<name>.md`) — HOW requirements are verified. Links to requirements and design units.
 
 For detailed format specifications, see `.syskit/ref/document-formats.md`.
 
@@ -190,11 +194,13 @@ Helper scripts:
 .syskit/scripts/new-int.sh --parent INT-005 <name>
 .syskit/scripts/new-unit.sh <name>
 .syskit/scripts/new-unit.sh --parent UNIT-002 <name>
+.syskit/scripts/new-ver.sh <name>
+.syskit/scripts/new-ver.sh --parent VER-001 <name>
 ```
 
 ## Cross-References
 
-Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN` identifiers (or `REQ-NNN.NN`, `INT-NNN.NN`, `UNIT-NNN.NN` for children) when referencing between documents.
+Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN`, `VER-NNN` identifiers (or `REQ-NNN.NN`, `INT-NNN.NN`, `UNIT-NNN.NN`, `VER-NNN.NN` for children) when referencing between documents.
 
 For detailed cross-reference rules and the sync tool, see `.syskit/ref/cross-references.md`.
 
@@ -1342,6 +1348,7 @@ hash_directory() {
 hash_directory "doc/requirements" "Requirements"
 hash_directory "doc/interfaces" "Interfaces"
 hash_directory "doc/design" "Design"
+hash_directory "doc/verification" "Verification"
 
 echo "Manifest updated: $MANIFEST"
 __SYSKIT_TEMPLATE_END__
@@ -1617,6 +1624,10 @@ When [condition/trigger], the system SHALL [observable behavior/response].
 
 <How this requirement will be verified>
 
+## Verified By
+
+- VER-NNN (<verification name>)
+
 ## Notes
 
 <Additional context>
@@ -1780,6 +1791,146 @@ echo "ID: $ID"
 __SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/new-unit.sh"
 
+# --- .syskit/scripts/new-ver.sh ---
+info "Creating .syskit/scripts/new-ver.sh"
+cat > ".syskit/scripts/new-ver.sh" << '__SYSKIT_TEMPLATE_END__'
+#!/bin/bash
+# Create a new verification document
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+VER_DIR="$PROJECT_ROOT/doc/verification"
+
+PARENT=""
+if [ "${1:-}" = "--parent" ]; then
+    PARENT="$2"
+    shift 2
+fi
+
+NAME="${1:-}"
+
+if [ -z "$NAME" ]; then
+    echo "Usage: new-ver.sh [--parent VER-NNN] <verification_name>"
+    echo "Example: new-ver.sh framebuffer_approval"
+    echo "Example: new-ver.sh --parent VER-002 edge_cases"
+    exit 1
+fi
+
+# Sanitize name: lowercase, replace spaces/hyphens with underscores
+NAME=$(echo "$NAME" | tr '[:upper:]' '[:lower:]' | tr ' -' '_')
+
+mkdir -p "$VER_DIR"
+
+if [ -n "$PARENT" ]; then
+    # ─── Child verification: VER-NNN.NN under parent ──────────────
+
+    # Extract numeric prefix from parent ID (e.g., VER-002 → 002)
+    PARENT_NUM=$(echo "$PARENT" | sed 's/^VER-//')
+
+    if ! [[ "$PARENT_NUM" =~ ^[0-9]{3}$ ]]; then
+        echo "Error: invalid parent ID '$PARENT' (expected VER-NNN)" >&2
+        exit 1
+    fi
+
+    # Warn if parent file doesn't exist
+    PARENT_FILE=$(find "$VER_DIR" -maxdepth 1 -name "ver_${PARENT_NUM}_*.md" -print -quit 2>/dev/null)
+    if [ -z "$PARENT_FILE" ]; then
+        echo "Warning: parent $PARENT has no matching file in $VER_DIR" >&2
+    fi
+
+    # Find next available child number under this parent
+    NEXT_CHILD=1
+    for f in "$VER_DIR"/ver_${PARENT_NUM}.[0-9][0-9]_*.md; do
+        if [ -f "$f" ]; then
+            CHILD_NUM=$(basename "$f" | sed "s/ver_${PARENT_NUM}\.\([0-9][0-9]\)_.*/\1/" | sed 's/^0*//')
+            CHILD_NUM=${CHILD_NUM:-0}
+            if [ "$CHILD_NUM" -ge "$NEXT_CHILD" ]; then
+                NEXT_CHILD=$((CHILD_NUM + 1))
+            fi
+        fi
+    done
+
+    CHILD_PADDED=$(printf "%02d" $NEXT_CHILD)
+    NUM_PART="${PARENT_NUM}.${CHILD_PADDED}"
+    FILENAME="ver_${NUM_PART}_${NAME}.md"
+    FILEPATH="$VER_DIR/$FILENAME"
+    ID="VER-${NUM_PART}"
+else
+    # ─── Top-level verification: VER-NNN ──────────────────────────
+
+    NEXT_NUM=1
+    for f in "$VER_DIR"/ver_[0-9][0-9][0-9]_*.md; do
+        if [ -f "$f" ]; then
+            NUM=$(basename "$f" | sed 's/ver_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
+            NUM=${NUM:-0}  # Default to 0 if empty
+            if [ "$NUM" -ge "$NEXT_NUM" ]; then
+                NEXT_NUM=$((NUM + 1))
+            fi
+        fi
+    done
+
+    NUM_PADDED=$(printf "%03d" $NEXT_NUM)
+    FILENAME="ver_${NUM_PADDED}_${NAME}.md"
+    FILEPATH="$VER_DIR/$FILENAME"
+    ID="VER-${NUM_PADDED}"
+fi
+
+if [ -f "$FILEPATH" ]; then
+    echo "Error: $FILEPATH already exists"
+    exit 1
+fi
+
+cat > "$FILEPATH" << EOF
+# $ID: $(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+
+## Verification Method
+
+Choose one:
+- **Test:** Verified by executing a test procedure
+- **Analysis:** Verified by technical evaluation
+- **Inspection:** Verified by examination
+- **Demonstration:** Verified by operation
+
+## Verifies Requirements
+
+- REQ-NNN (<requirement name>)
+
+## Verified Design Units
+
+- UNIT-NNN (<unit name>)
+
+## Preconditions
+
+<What must be true before this verification can be executed>
+
+## Procedure
+
+<Step-by-step verification procedure>
+
+1. <Step 1>
+2. <Step 2>
+3. ...
+
+## Expected Results
+
+- **Pass Criteria:** <observable outcome that means the requirement is satisfied>
+- **Fail Criteria:** <observable outcome that means the requirement is NOT satisfied>
+
+## Test Implementation
+
+- \`<test filepath>\`: <what it tests>
+
+## Notes
+
+<Additional context, edge cases, known limitations>
+EOF
+
+echo "Created: $FILEPATH"
+echo "ID: $ID"
+__SYSKIT_TEMPLATE_END__
+chmod +x ".syskit/scripts/new-ver.sh"
+
 # --- .syskit/scripts/template-check.sh ---
 info "Creating .syskit/scripts/template-check.sh"
 cat > ".syskit/scripts/template-check.sh" << '__SYSKIT_TEMPLATE_END__'
@@ -1825,9 +1976,9 @@ done
 
 if [ -n "$TYPE_FILTER" ]; then
     case "$TYPE_FILTER" in
-        req|int|unit|framework) ;;
+        req|int|unit|ver|framework) ;;
         *)
-            echo "Error: --type must be req, int, unit, or framework" >&2
+            echo "Error: --type must be req, int, unit, ver, or framework" >&2
             exit 1
             ;;
     esac
@@ -1852,6 +2003,8 @@ template_for() {
         echo "$TEMPLATE_DIR/interfaces/int_000_template.md"
     elif [[ "$base" =~ ^unit_[0-9] ]]; then
         echo "$TEMPLATE_DIR/design/unit_000_template.md"
+    elif [[ "$base" =~ ^ver_[0-9] ]]; then
+        echo "$TEMPLATE_DIR/verification/ver_000_template.md"
     # Framework docs — matched by exact name
     elif [ -f "$TEMPLATE_DIR/requirements/$base" ]; then
         echo "$TEMPLATE_DIR/requirements/$base"
@@ -1859,6 +2012,8 @@ template_for() {
         echo "$TEMPLATE_DIR/interfaces/$base"
     elif [ -f "$TEMPLATE_DIR/design/$base" ]; then
         echo "$TEMPLATE_DIR/design/$base"
+    elif [ -f "$TEMPLATE_DIR/verification/$base" ]; then
+        echo "$TEMPLATE_DIR/verification/$base"
     fi
 }
 
@@ -1869,6 +2024,7 @@ doc_type() {
     if [[ "$base" =~ ^req_ ]]; then echo "req"
     elif [[ "$base" =~ ^int_ ]]; then echo "int"
     elif [[ "$base" =~ ^unit_ ]]; then echo "unit"
+    elif [[ "$base" =~ ^ver_ ]]; then echo "ver"
     else echo "framework"
     fi
 }
@@ -1914,7 +2070,7 @@ collect_docs() {
     fi
 
     # Scan doc directories
-    for dir in doc/requirements doc/interfaces doc/design; do
+    for dir in doc/requirements doc/interfaces doc/design doc/verification; do
         [ -d "$dir" ] || continue
         for f in "$dir"/*.md; do
             [ -f "$f" ] || continue
@@ -2113,6 +2269,7 @@ framework_order() {
     case "$1" in
         *requirements) echo "states_and_modes.md quality_metrics.md" ;;
         *design)       echo "design_decisions.md concept_of_execution.md" ;;
+        *verification) echo "test_strategy.md" ;;
         *)             echo "" ;;
     esac
 }
@@ -2159,7 +2316,7 @@ update_toc() {
 
         # Classify: numbered spec files vs framework files
         case "$base" in
-            req_[0-9][0-9][0-9]*.md | unit_[0-9][0-9][0-9]*.md | int_[0-9][0-9][0-9]*.md)
+            req_[0-9][0-9][0-9]*.md | unit_[0-9][0-9][0-9]*.md | int_[0-9][0-9][0-9]*.md | ver_[0-9][0-9][0-9]*.md)
                 numbered_entries="${numbered_entries}${entry}"
                 ;;
             *)
@@ -2238,6 +2395,7 @@ update_toc() {
 update_toc "doc/requirements"
 update_toc "doc/interfaces"
 update_toc "doc/design"
+update_toc "doc/verification"
 
 echo "TOC updated in doc/*/README.md"
 __SYSKIT_TEMPLATE_END__
@@ -2258,6 +2416,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REQ_DIR="$PROJECT_ROOT/doc/requirements"
 INT_DIR="$PROJECT_ROOT/doc/interfaces"
 UNIT_DIR="$PROJECT_ROOT/doc/design"
+VER_DIR="$PROJECT_ROOT/doc/verification"
 
 FIX_MODE=false
 [ "${1:-}" = "--fix" ] && FIX_MODE=true
@@ -2278,11 +2437,12 @@ declare -A ALL_IDS       # ID -> 1
 REQ_PAT='REQ-[0-9]{3}(\.[0-9]{2})?'
 INT_PAT='INT-[0-9]{3}(\.[0-9]{2})?'
 UNIT_PAT='UNIT-[0-9]{3}(\.[0-9]{2})?'
+VER_PAT='VER-[0-9]{3}(\.[0-9]{2})?'
 
 build_id_map() {
     local tag dir prefix entry base num id name
     # Scan all document types (supports hierarchical numbering: XXX-NNN or XXX-NNN.NN)
-    for entry in "req:$REQ_DIR:REQ" "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT"; do
+    for entry in "req:$REQ_DIR:REQ" "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT" "ver:$VER_DIR:VER"; do
         IFS=':' read -r tag dir prefix <<< "$entry"
         [ -d "$dir" ] || continue
         for f in "$dir"/${tag}_*.md; do
@@ -2347,6 +2507,9 @@ parse_all() {
                 for x in $(section_ids "$file" "## Interfaces" 2 "$INT_PAT"); do
                     add_ref req_iface "$id" "$x"
                 done
+                for x in $(section_ids "$file" "## Verified By" 2 "$VER_PAT"); do
+                    add_ref req_verby "$id" "$x"
+                done
                 ;;
             UNIT-*)
                 for x in $(section_ids "$file" "## Implements Requirements" 2 "$REQ_PAT"); do
@@ -2357,6 +2520,14 @@ parse_all() {
                 done
                 for x in $(section_ids "$file" "### Consumes" 3 "$INT_PAT"); do
                     add_ref unit_cons "$id" "$x"
+                done
+                ;;
+            VER-*)
+                for x in $(section_ids "$file" "## Verifies Requirements" 2 "$REQ_PAT"); do
+                    add_ref ver_req "$id" "$x"
+                done
+                for x in $(section_ids "$file" "## Verified Design Units" 2 "$UNIT_PAT"); do
+                    add_ref ver_unit "$id" "$x"
                 done
                 ;;
             INT-*)
@@ -2507,6 +2678,19 @@ check_consistency() {
     check_pair int_cons unit_cons \
         "Parties (Consumer)" "Consumes" \
         "### Consumes" 3 list
+
+    # VER.VerifiesRequirements <-> REQ.VerifiedBy
+    check_pair ver_req req_verby \
+        "Verifies Requirements" "Verified By" \
+        "## Verified By" 2 list
+    check_pair req_verby ver_req \
+        "Verified By" "Verifies Requirements" \
+        "## Verifies Requirements" 2 list
+
+    # VER.VerifiedDesignUnits <-> UNIT.Verification
+    check_pair ver_unit unit_ver \
+        "Verified Design Units" "Verification" \
+        "## Verification" 2 list
 }
 
 check_orphans() {
@@ -2532,21 +2716,22 @@ check_orphans() {
 
 build_id_map
 
-REQ_N=0 INT_N=0 UNIT_N=0
+REQ_N=0 INT_N=0 UNIT_N=0 VER_N=0
 for id in "${!ALL_IDS[@]}"; do
     case "$id" in
         REQ-*)  REQ_N=$((REQ_N + 1)) ;;
         INT-*)  INT_N=$((INT_N + 1)) ;;
         UNIT-*) UNIT_N=$((UNIT_N + 1)) ;;
+        VER-*)  VER_N=$((VER_N + 1)) ;;
     esac
 done
 
 echo "# Traceability Sync$($FIX_MODE && echo ' (--fix)')"
 echo ""
-echo "Scanned: ${REQ_N} requirements, ${INT_N} interfaces, ${UNIT_N} design units"
+echo "Scanned: ${REQ_N} requirements, ${INT_N} interfaces, ${UNIT_N} design units, ${VER_N} verifications"
 echo ""
 
-if [ $((REQ_N + INT_N + UNIT_N)) -eq 0 ]; then
+if [ $((REQ_N + INT_N + UNIT_N + VER_N)) -eq 0 ]; then
     echo "No specification documents found in doc/."
     exit 0
 fi
@@ -3157,8 +3342,10 @@ cat > ".syskit/ref/cross-references.md" << '__SYSKIT_TEMPLATE_END__'
 - `INT-005.01` — Interface 005, child 01
 - `UNIT-012` — Design unit 012 (top-level)
 - `UNIT-012.03` — Design unit 012, child 03
+- `VER-007` — Verification 007 (top-level)
+- `VER-007.02` — Verification 007, child 02
 
-Identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`, `int_005.01_uart.md` → `INT-005.01`, `unit_012.03_pid.md` → `UNIT-012.03`
+Identifiers are derived from filenames: `req_001_foo.md` → `REQ-001`, `req_001.03_bar.md` → `REQ-001.03`, `int_005.01_uart.md` → `INT-005.01`, `unit_012.03_pid.md` → `UNIT-012.03`, `ver_007_motor_test.md` → `VER-007`, `ver_007.02_edge_cases.md` → `VER-007.02`
 
 ## Hierarchical Numbering
 
@@ -3170,6 +3357,8 @@ All document types support two-level hierarchy using dot-notation. Child documen
 - Child: `int_005.01_uart_registers.md` → `INT-005.01`
 - Top-level: `unit_012_control_loop.md` → `UNIT-012`
 - Child: `unit_012.03_pid_controller.md` → `UNIT-012.03`
+- Top-level: `ver_007_motor_test.md` → `VER-007`
+- Child: `ver_007.02_edge_cases.md` → `VER-007.02`
 
 Top-level IDs use 3-digit padding (`NNN`). Children use 2-digit padding (`.NN`). Hierarchy is limited to two levels.
 
@@ -3181,6 +3370,8 @@ The following links must be maintained bidirectionally:
 - REQ "Interfaces" ↔ INT "Referenced By"
 - UNIT "Provides" ↔ INT "Parties Provider"
 - UNIT "Consumes" ↔ INT "Parties Consumer"
+- VER "Verifies Requirements" ↔ REQ "Verified By"
+- VER "Verified Design Units" ↔ UNIT "Verification"
 
 ## Cross-Reference Sync
 
@@ -3244,6 +3435,15 @@ Design units describe HOW a piece of the system works.
 - Reference interfaces being implemented/consumed with `INT-NNN`
 - Document internal interfaces to other units
 - Link to implementation files in `src/`
+
+## Verification (`ver_NNN_<name>.md`)
+
+Verification documents describe HOW a requirement is verified.
+
+- Reference requirements being verified with `REQ-NNN`
+- Reference design units being exercised with `UNIT-NNN`
+- Link to test implementation files
+- Define pass/fail criteria
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/ref/requirement-format.md ---
@@ -4285,7 +4485,7 @@ New to syskit? Run `/syskit-guide` for an interactive walkthrough.
 
 ### Reference
 
-- Specifications: `doc/requirements/`, `doc/interfaces/`, `doc/design/`
+- Specifications: `doc/requirements/`, `doc/interfaces/`, `doc/design/`, `doc/verification/`
 - Working documents: `.syskit/analysis/`, `.syskit/tasks/`
 - Scripts: `.syskit/scripts/`
 - Full instructions: `.syskit/AGENTS.md` (read on demand, not auto-loaded)
@@ -4348,6 +4548,10 @@ Format: **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
 - **Analysis:** Verified by technical evaluation
 - **Inspection:** Verified by examination
 - **Demonstration:** Verified by operation
+
+## Verified By
+
+- VER-NNN (<verification name>)
 
 ## Notes
 
@@ -4927,11 +5131,204 @@ units (UNIT-NNN) and interfaces (INT-NNN) where helpful.>
 <!-- syskit-arch-end -->
 __SYSKIT_TEMPLATE_END__
 
+# --- .syskit/templates/doc/verification/ver_000_template.md ---
+info "Creating .syskit/templates/doc/verification/ver_000_template.md"
+cat > ".syskit/templates/doc/verification/ver_000_template.md" << '__SYSKIT_TEMPLATE_END__'
+# VER-000: Template
+
+This is a template file. Create new verification documents using:
+
+```bash
+.syskit/scripts/new-ver.sh <verification_name>
+```
+
+Or copy this template and modify.
+
+---
+
+## Verification Method
+
+Choose one:
+- **Test:** Verified by executing a test procedure
+- **Analysis:** Verified by technical evaluation
+- **Inspection:** Verified by examination
+- **Demonstration:** Verified by operation
+
+## Verifies Requirements
+
+- REQ-NNN (<requirement name>)
+
+List all requirements this verification procedure covers.
+
+## Verified Design Units
+
+- UNIT-NNN (<unit name>)
+
+List all design units exercised by this verification.
+
+## Preconditions
+
+<What must be true before this verification can be executed>
+
+- System state, configuration, or environment required
+- Dependencies on other verifications completing first
+- Required test data or fixtures
+
+## Procedure
+
+<Step-by-step verification procedure>
+
+1. <Step 1>
+2. <Step 2>
+3. ...
+
+For automated tests, describe what the test does at a level useful for understanding intent, not line-by-line code walkthrough.
+
+## Expected Results
+
+<What constitutes a pass>
+
+- **Pass Criteria:** <observable outcome that means the requirement is satisfied>
+- **Fail Criteria:** <observable outcome that means the requirement is NOT satisfied>
+
+## Test Implementation
+
+- `<test filepath>`: <description of what this test file does>
+
+List all test source files that implement this verification.
+
+## Notes
+
+<Additional context, edge cases, known limitations of this verification>
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/templates/doc/verification/test_strategy.md ---
+info "Creating .syskit/templates/doc/verification/test_strategy.md"
+cat > ".syskit/templates/doc/verification/test_strategy.md" << '__SYSKIT_TEMPLATE_END__'
+# Test Strategy
+
+This document records the cross-cutting verification strategy: frameworks, tools, approaches, and coverage goals that apply across all verification documents.
+
+## Test Frameworks and Tools
+
+### <Framework/Tool Name>
+
+- **Type:** Unit Test | Integration Test | System Test | Static Analysis
+- **Language/Platform:** <applicable language or platform>
+- **Usage:** <what it is used for>
+- **Configuration:** <where configuration lives, e.g., config file path>
+
+## Test Approaches
+
+### Approval Testing
+
+- **Description:** <how approval testing is used in this project>
+- **Tool:** <approval testing tool>
+- **Approved files location:** <path to approved files>
+
+### <Other Approach>
+
+- **Description:** <description of the approach>
+- **Applicable to:** <which types of requirements or components>
+
+## Coverage Goals
+
+### Requirement Coverage
+
+- **Target:** 100% of SHALL requirements have at least one VER-NNN
+- **Measurement:** Traceability analysis via `trace-sync.sh`
+
+### Code Coverage
+
+- **Target:** <percentage>
+- **Tool:** <coverage tool>
+- **Exclusions:** <what is excluded from coverage measurement>
+
+### Branch Coverage
+
+- **Target:** <percentage>
+- **Measurement:** <tool>
+
+## Test Environments
+
+### <Environment Name>
+
+- **Description:** <what this environment is>
+- **Purpose:** <what types of tests run here>
+- **Setup:** <how to set up or access>
+
+## Test Execution
+
+### CI/CD Integration
+
+- **Pipeline:** <where tests run in CI>
+- **Triggers:** <what triggers test execution>
+- **Reporting:** <how results are reported>
+
+### Manual Testing
+
+- **When Required:** <conditions requiring manual testing>
+- **Procedure:** <how manual tests are documented and tracked>
+
+## Test Data Management
+
+- **Strategy:** <how test data is created, maintained, and versioned>
+- **Location:** <where test data lives>
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/templates/doc/verification/README.md ---
+info "Creating .syskit/templates/doc/verification/README.md"
+cat > ".syskit/templates/doc/verification/README.md" << '__SYSKIT_TEMPLATE_END__'
+# Verification
+
+*Software Verification Description (SVD) for <system name>*
+
+This directory contains the verification specifications — the authoritative record of **how** the system's requirements are verified.
+
+## System Overview
+
+<Brief description of the system: what it is, what it does, and its operational context.>
+
+## Document Description
+
+<Brief overview of what this document covers and how it is organized.>
+
+## Purpose
+
+Each verification document describes a test or analysis procedure that demonstrates a requirement is satisfied. Verification documents link back to requirements (`REQ-NNN`) and design units (`UNIT-NNN`), completing the traceability chain from requirement through design to test.
+
+Verification methods:
+
+- **Test** — Verified by executing a test procedure with defined pass/fail criteria
+- **Analysis** — Verified by technical evaluation (calculation, simulation, modeling)
+- **Inspection** — Verified by examination of design artifacts
+- **Demonstration** — Verified by operating the system under specified conditions
+
+## Conventions
+
+- **Naming:** `ver_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
+- **Child verifications:** `ver_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `ver_003.01_edge_cases.md`)
+- **Create new:** `.syskit/scripts/new-ver.sh <name>` or `.syskit/scripts/new-ver.sh --parent VER-NNN <name>`
+- **Cross-references:** Use `VER-NNN` or `VER-NNN.NN` identifiers (derived from filename)
+- **Traceability:** Each verification document references the requirements it verifies
+
+## Framework Documents
+
+- **test_strategy.md** — Cross-cutting test strategy: frameworks, tools, coverage goals, and approaches
+
+## Table of Contents
+
+<!-- TOC-START -->
+*Run `.syskit/scripts/toc-update.sh` to generate.*
+<!-- TOC-END -->
+__SYSKIT_TEMPLATE_END__
+
 # Copy-templates: always overwrite
 info "Updating copy-templates in doc/..."
 cp .syskit/templates/doc/requirements/req_000_template.md doc/requirements/req_000_template.md
 cp .syskit/templates/doc/interfaces/int_000_template.md doc/interfaces/int_000_template.md
 cp .syskit/templates/doc/design/unit_000_template.md doc/design/unit_000_template.md
+cp .syskit/templates/doc/verification/ver_000_template.md doc/verification/ver_000_template.md
 
 # Framework docs: only create if missing
 for tmpl in \
@@ -4941,7 +5338,9 @@ for tmpl in \
     "doc/design/design_decisions.md" \
     "doc/requirements/README.md" \
     "doc/interfaces/README.md" \
-    "doc/design/README.md"
+    "doc/design/README.md" \
+    "doc/verification/test_strategy.md" \
+    "doc/verification/README.md"
 do
     if [ ! -f "$tmpl" ]; then
         info "Creating $tmpl"

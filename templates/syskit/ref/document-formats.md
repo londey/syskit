@@ -43,3 +43,12 @@ Design units describe HOW a piece of the system works.
 - Reference interfaces being implemented/consumed with `INT-NNN`
 - Document internal interfaces to other units
 - Link to implementation files in `src/`
+
+## Verification (`ver_NNN_<name>.md`)
+
+Verification documents describe HOW a requirement is verified.
+
+- Reference requirements being verified with `REQ-NNN`
+- Reference design units being exercised with `UNIT-NNN`
+- Link to test implementation files
+- Define pass/fail criteria

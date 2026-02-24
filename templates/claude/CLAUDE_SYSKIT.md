@@ -24,7 +24,7 @@ New to syskit? Run `/syskit-guide` for an interactive walkthrough.
 
 ### Reference
 
-- Specifications: `doc/requirements/`, `doc/interfaces/`, `doc/design/`
+- Specifications: `doc/requirements/`, `doc/interfaces/`, `doc/design/`, `doc/verification/`
 - Working documents: `.syskit/analysis/`, `.syskit/tasks/`
 - Scripts: `.syskit/scripts/`
 - Full instructions: `.syskit/AGENTS.md` (read on demand, not auto-loaded)

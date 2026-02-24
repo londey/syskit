@@ -38,6 +38,7 @@ info "Creating directories..."
 mkdir -p doc/requirements
 mkdir -p doc/interfaces
 mkdir -p doc/design
+mkdir -p doc/verification
 mkdir -p .syskit/scripts
 mkdir -p .syskit/prompts
 mkdir -p .syskit/ref
@@ -46,6 +47,7 @@ mkdir -p .syskit/tasks
 mkdir -p .syskit/templates/doc/requirements
 mkdir -p .syskit/templates/doc/interfaces
 mkdir -p .syskit/templates/doc/design
+mkdir -p .syskit/templates/doc/verification
 mkdir -p .claude/commands
 
 SCRIPT_HEADER
@@ -122,6 +124,9 @@ embed_file "$TEMPLATES_DIR/doc/requirements/README.md" ".syskit/templates/doc/re
 embed_file "$TEMPLATES_DIR/doc/interfaces/README.md" ".syskit/templates/doc/interfaces/README.md" "644" >> "$OUTPUT"
 embed_file "$TEMPLATES_DIR/doc/design/README.md" ".syskit/templates/doc/design/README.md" "644" >> "$OUTPUT"
 embed_file "$TEMPLATES_DIR/doc/design/ARCHITECTURE.md" ".syskit/templates/doc/design/ARCHITECTURE.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/verification/ver_000_template.md" ".syskit/templates/doc/verification/ver_000_template.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/verification/test_strategy.md" ".syskit/templates/doc/verification/test_strategy.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/verification/README.md" ".syskit/templates/doc/verification/README.md" "644" >> "$OUTPUT"
 
 # Copy templates from .syskit/templates/ to doc/
 # Copy-templates: always overwrite (users copy these, not edit originals)
@@ -133,6 +138,7 @@ info "Updating copy-templates in doc/..."
 cp .syskit/templates/doc/requirements/req_000_template.md doc/requirements/req_000_template.md
 cp .syskit/templates/doc/interfaces/int_000_template.md doc/interfaces/int_000_template.md
 cp .syskit/templates/doc/design/unit_000_template.md doc/design/unit_000_template.md
+cp .syskit/templates/doc/verification/ver_000_template.md doc/verification/ver_000_template.md
 
 # Framework docs: only create if missing
 for tmpl in \
@@ -142,7 +148,9 @@ for tmpl in \
     "doc/design/design_decisions.md" \
     "doc/requirements/README.md" \
     "doc/interfaces/README.md" \
-    "doc/design/README.md"
+    "doc/design/README.md" \
+    "doc/verification/test_strategy.md" \
+    "doc/verification/README.md"
 do
     if [ ! -f "$tmpl" ]; then
         info "Creating $tmpl"

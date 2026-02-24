@@ -10,6 +10,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REQ_DIR="$PROJECT_ROOT/doc/requirements"
 INT_DIR="$PROJECT_ROOT/doc/interfaces"
 UNIT_DIR="$PROJECT_ROOT/doc/design"
+VER_DIR="$PROJECT_ROOT/doc/verification"
 
 FIX_MODE=false
 [ "${1:-}" = "--fix" ] && FIX_MODE=true
@@ -30,11 +31,12 @@ declare -A ALL_IDS       # ID -> 1
 REQ_PAT='REQ-[0-9]{3}(\.[0-9]{2})?'
 INT_PAT='INT-[0-9]{3}(\.[0-9]{2})?'
 UNIT_PAT='UNIT-[0-9]{3}(\.[0-9]{2})?'
+VER_PAT='VER-[0-9]{3}(\.[0-9]{2})?'
 
 build_id_map() {
     local tag dir prefix entry base num id name
     # Scan all document types (supports hierarchical numbering: XXX-NNN or XXX-NNN.NN)
-    for entry in "req:$REQ_DIR:REQ" "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT"; do
+    for entry in "req:$REQ_DIR:REQ" "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT" "ver:$VER_DIR:VER"; do
         IFS=':' read -r tag dir prefix <<< "$entry"
         [ -d "$dir" ] || continue
         for f in "$dir"/${tag}_*.md; do
@@ -99,6 +101,9 @@ parse_all() {
                 for x in $(section_ids "$file" "## Interfaces" 2 "$INT_PAT"); do
                     add_ref req_iface "$id" "$x"
                 done
+                for x in $(section_ids "$file" "## Verified By" 2 "$VER_PAT"); do
+                    add_ref req_verby "$id" "$x"
+                done
                 ;;
             UNIT-*)
                 for x in $(section_ids "$file" "## Implements Requirements" 2 "$REQ_PAT"); do
@@ -109,6 +114,14 @@ parse_all() {
                 done
                 for x in $(section_ids "$file" "### Consumes" 3 "$INT_PAT"); do
                     add_ref unit_cons "$id" "$x"
+                done
+                ;;
+            VER-*)
+                for x in $(section_ids "$file" "## Verifies Requirements" 2 "$REQ_PAT"); do
+                    add_ref ver_req "$id" "$x"
+                done
+                for x in $(section_ids "$file" "## Verified Design Units" 2 "$UNIT_PAT"); do
+                    add_ref ver_unit "$id" "$x"
                 done
                 ;;
             INT-*)
@@ -259,6 +272,19 @@ check_consistency() {
     check_pair int_cons unit_cons \
         "Parties (Consumer)" "Consumes" \
         "### Consumes" 3 list
+
+    # VER.VerifiesRequirements <-> REQ.VerifiedBy
+    check_pair ver_req req_verby \
+        "Verifies Requirements" "Verified By" \
+        "## Verified By" 2 list
+    check_pair req_verby ver_req \
+        "Verified By" "Verifies Requirements" \
+        "## Verifies Requirements" 2 list
+
+    # VER.VerifiedDesignUnits <-> UNIT.Verification
+    check_pair ver_unit unit_ver \
+        "Verified Design Units" "Verification" \
+        "## Verification" 2 list
 }
 
 check_orphans() {
@@ -284,21 +310,22 @@ check_orphans() {
 
 build_id_map
 
-REQ_N=0 INT_N=0 UNIT_N=0
+REQ_N=0 INT_N=0 UNIT_N=0 VER_N=0
 for id in "${!ALL_IDS[@]}"; do
     case "$id" in
         REQ-*)  REQ_N=$((REQ_N + 1)) ;;
         INT-*)  INT_N=$((INT_N + 1)) ;;
         UNIT-*) UNIT_N=$((UNIT_N + 1)) ;;
+        VER-*)  VER_N=$((VER_N + 1)) ;;
     esac
 done
 
 echo "# Traceability Sync$($FIX_MODE && echo ' (--fix)')"
 echo ""
-echo "Scanned: ${REQ_N} requirements, ${INT_N} interfaces, ${UNIT_N} design units"
+echo "Scanned: ${REQ_N} requirements, ${INT_N} interfaces, ${UNIT_N} design units, ${VER_N} verifications"
 echo ""
 
-if [ $((REQ_N + INT_N + UNIT_N)) -eq 0 ]; then
+if [ $((REQ_N + INT_N + UNIT_N + VER_N)) -eq 0 ]; then
     echo "No specification documents found in doc/."
     exit 0
 fi

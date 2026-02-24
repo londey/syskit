@@ -126,6 +126,10 @@ When [condition/trigger], the system SHALL [observable behavior/response].
 
 <How this requirement will be verified>
 
+## Verified By
+
+- VER-NNN (<verification name>)
+
 ## Notes
 
 <Additional context>

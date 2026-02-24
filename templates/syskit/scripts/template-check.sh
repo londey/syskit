@@ -40,9 +40,9 @@ done
 
 if [ -n "$TYPE_FILTER" ]; then
     case "$TYPE_FILTER" in
-        req|int|unit|framework) ;;
+        req|int|unit|ver|framework) ;;
         *)
-            echo "Error: --type must be req, int, unit, or framework" >&2
+            echo "Error: --type must be req, int, unit, ver, or framework" >&2
             exit 1
             ;;
     esac
@@ -67,6 +67,8 @@ template_for() {
         echo "$TEMPLATE_DIR/interfaces/int_000_template.md"
     elif [[ "$base" =~ ^unit_[0-9] ]]; then
         echo "$TEMPLATE_DIR/design/unit_000_template.md"
+    elif [[ "$base" =~ ^ver_[0-9] ]]; then
+        echo "$TEMPLATE_DIR/verification/ver_000_template.md"
     # Framework docs — matched by exact name
     elif [ -f "$TEMPLATE_DIR/requirements/$base" ]; then
         echo "$TEMPLATE_DIR/requirements/$base"
@@ -74,6 +76,8 @@ template_for() {
         echo "$TEMPLATE_DIR/interfaces/$base"
     elif [ -f "$TEMPLATE_DIR/design/$base" ]; then
         echo "$TEMPLATE_DIR/design/$base"
+    elif [ -f "$TEMPLATE_DIR/verification/$base" ]; then
+        echo "$TEMPLATE_DIR/verification/$base"
     fi
 }
 
@@ -84,6 +88,7 @@ doc_type() {
     if [[ "$base" =~ ^req_ ]]; then echo "req"
     elif [[ "$base" =~ ^int_ ]]; then echo "int"
     elif [[ "$base" =~ ^unit_ ]]; then echo "unit"
+    elif [[ "$base" =~ ^ver_ ]]; then echo "ver"
     else echo "framework"
     fi
 }
@@ -129,7 +134,7 @@ collect_docs() {
     fi
 
     # Scan doc directories
-    for dir in doc/requirements doc/interfaces doc/design; do
+    for dir in doc/requirements doc/interfaces doc/design doc/verification; do
         [ -d "$dir" ] || continue
         for f in "$dir"/*.md; do
             [ -f "$f" ] || continue

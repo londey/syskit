@@ -11,6 +11,7 @@ All persistent engineering documents live under `doc/`:
 - `doc/requirements/` — What the system must do
 - `doc/interfaces/` — Contracts between components and with external systems
 - `doc/design/` — How the system accomplishes requirements
+- `doc/verification/` — How requirements are verified
 - `ARCHITECTURE.md` — Auto-generated architecture overview with block diagram (project root)
 
 Working documents live under `.syskit/`:
@@ -29,6 +30,7 @@ Reference material for subagents:
 - **Requirements** (`req_NNN_<name>.md`) — WHAT the system must do. Use condition/response format.
 - **Interfaces** (`int_NNN_<name>.md`) — Contracts between components and external systems.
 - **Design Units** (`unit_NNN_<name>.md`) — HOW the system works. Links to requirements and interfaces.
+- **Verification** (`ver_NNN_<name>.md`) — HOW requirements are verified. Links to requirements and design units.
 
 For detailed format specifications, see `.syskit/ref/document-formats.md`.
 
@@ -148,11 +150,13 @@ Helper scripts:
 .syskit/scripts/new-int.sh --parent INT-005 <name>
 .syskit/scripts/new-unit.sh <name>
 .syskit/scripts/new-unit.sh --parent UNIT-002 <name>
+.syskit/scripts/new-ver.sh <name>
+.syskit/scripts/new-ver.sh --parent VER-001 <name>
 ```
 
 ## Cross-References
 
-Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN` identifiers (or `REQ-NNN.NN`, `INT-NNN.NN`, `UNIT-NNN.NN` for children) when referencing between documents.
+Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN`, `VER-NNN` identifiers (or `REQ-NNN.NN`, `INT-NNN.NN`, `UNIT-NNN.NN`, `VER-NNN.NN` for children) when referencing between documents.
 
 For detailed cross-reference rules and the sync tool, see `.syskit/ref/cross-references.md`.
 

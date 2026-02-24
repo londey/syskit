@@ -1,95 +1,58 @@
-# Refine Changes (Scoped) — Subagent Instructions
+# Refine Proposed Changes — Subagent Instructions
 
-You are drafting and applying proposed specification changes for a specific scope of documents, based on a completed impact analysis.
+You are refining previously proposed specification changes based on the user's review feedback.
 
 **Important:** Do NOT read `.syskit/AGENTS.md` — your instructions are self-contained in this prompt.
 
-## Proposed Change
+## User Feedback
 
-{{PROPOSED_CHANGE}}
+{{FEEDBACK}}
 
-## Scope
+## Affected Files
 
-You are refining ONLY the following documents:
+The following documents may need modification based on the feedback:
 
-{{SCOPE_FILTER}}
-
-Scope type: {{SCOPE_NAME}}
+{{AFFECTED_FILES}}
 
 ## Instructions
 
-1. Read the impact analysis from: `{{ANALYSIS_FOLDER}}/impact.md`
+1. Read the impact analysis summary from: `{{ANALYSIS_FOLDER}}/impact.md` — read only the `## Summary` section (last ~15 lines) for context.
 
-2. Read ONLY the documents listed in your scope (above) from the `doc/` directories. Do NOT read or modify documents outside your scope.
+2. Read the change summary from: `{{ANALYSIS_FOLDER}}/proposed_changes.md` — read the `## Change Summary` table to understand what was originally proposed.
 
-3. If other refinement files exist in `{{ANALYSIS_FOLDER}}/` (e.g., `refine_requirements.md` from a previous iteration), read them to understand what changes have already been made. Your changes should be consistent with previously approved refinements.
+3. Read each file listed in the affected files above from the `doc/` directories. These files already contain the proposed changes (uncommitted).
 
-4. For each scoped document, **edit the file directly** with the proposed changes:
-   - Make the specific modifications needed to address the proposed change
+4. Run `git diff -- <file>` for each affected file to see what was changed by the original proposal. This helps you understand the baseline and avoid undoing correct changes.
+
+5. Analyze the user's feedback against the current state of the documents. Determine what specific edits are needed to address the feedback.
+
+6. For each document that needs changes, **edit the file directly**:
+   - Make the specific modifications needed to address the user's feedback
+   - Preserve correct changes from the original proposal — only modify what the feedback asks for
    - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
-   - When referencing documents outside your scope that are also affected (per impact.md), note that they will be refined in a later iteration — flag these in the Cross-Scope Notes section.
    - **Document style rules** (critical):
      - Write what the system *is now*, not how it changed. No changelog-style language ("previously", "was changed to", "updated from"). The git diff is the changelog.
      - Do not add version numbers, revision history, or "Version:" fields to internal documents. Git is the version control.
      - Keep rationale sections brief — explain *why*, don't re-describe the system. Reference other docs by ID (REQ-NNN, INT-NNN, UNIT-NNN) instead of duplicating their content.
      - After editing, re-read the document — it should stand alone as the definitive reference.
 
-5. While editing, validate each requirement you modify or create:
+7. While editing, validate each requirement you modify or create:
    - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
    - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
    - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
    - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
 
-6. Write a refinement summary to `{{ANALYSIS_FOLDER}}/refine_{{SCOPE_NAME}}.md` in this format:
+8. If the feedback implies changes to documents NOT in your affected files list (e.g., the user's feedback about one document creates a consistency issue with another), note this in the cross-impact section of your summary but do NOT modify documents outside your list.
 
-   ```markdown
-   # Refinement: {{SCOPE_NAME}}
-
-   Based on: impact.md
-   Created: <timestamp>
-   Status: Pending Approval
-
-   ## Change Summary
-
-   | Document | Type | Change Description |
-   |----------|------|-------------------|
-   | <filename> | Modify | <brief description> |
-
-   ## Document: <filename>
-
-   ### Rationale
-
-   <why this change is needed>
-
-   ### Changes Made
-
-   <brief description of what was modified — the actual diff is in git>
-
-   ### Cross-Scope Dependencies
-
-   - <references to documents in other scopes that may need updating>
-
-   ---
-
-   (repeat for each scoped document)
-
-   ## Quality Warnings
-
-   <list any requirement quality issues found, or "None.">
-
-   ## Cross-Scope Notes
-
-   <list any changes that may affect documents in other scopes, to be addressed in subsequent refine iterations or a re-run of impact analysis>
-   ```
-
-7. After editing all scoped documents and writing the summary, return ONLY this compact response (nothing else):
+9. After editing all affected documents, return ONLY this compact response (nothing else):
 
    REFINE_SUMMARY_START
-   Scope: {{SCOPE_NAME}}
+   Feedback: <one-line summary of the feedback addressed>
+   Documents examined: <n>
    Documents edited: <n>
-   Files: <comma-separated filenames>
+   Files edited: <comma-separated filenames>
+   Changes: <one-line per edited file: "filename — brief description of what changed">
    Quality warnings: <n> (<brief list or "None">)
-   Cross-scope notes: <n> (<brief list or "None">)
-   Summary written to: {{ANALYSIS_FOLDER}}/refine_{{SCOPE_NAME}}.md
+   Cross-impact notes: <any consistency issues with documents outside the affected set, or "None">
    REFINE_SUMMARY_END

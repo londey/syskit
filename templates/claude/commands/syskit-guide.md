@@ -127,12 +127,14 @@ Explain:
 - The manifest (`.syskit/manifest.md`) stores SHA256 hashes of every spec document
 - This enables **freshness checking** — syskit detects when specs have changed between workflow steps, preventing work based on stale analysis
 
-Then explain the four-command change workflow for future changes:
+Then explain the change workflow for future changes:
 
 1. **`/syskit-impact`** — Describe a change; syskit analyzes which specs are affected
-2. **`/syskit-propose`** — Review and approve proposed modifications to affected specs
-3. **`/syskit-plan`** — Break approved spec changes into implementation tasks
-4. **`/syskit-implement`** — Execute tasks one by one with verification
+2. **`/syskit-propose`** — Draft proposed modifications to affected specs
+3. **`/syskit-refine`** — (Optional, repeatable) Fix issues in proposed changes based on your review feedback
+4. **`/syskit-approve`** — Approve changes when ready (works across sessions — review overnight if needed)
+5. **`/syskit-plan`** — Break approved spec changes into implementation tasks
+6. **`/syskit-implement`** — Execute tasks one by one with verification
 
 Tell the user: "You're set up. When you want to make a change, start with `/syskit-impact` and describe what you want to change."
 
@@ -165,9 +167,11 @@ Explain the conventions this project uses:
 Walk through how to make changes in this project:
 
 1. **`/syskit-impact <description>`** — Start here. Describe what you want to change. Syskit analyzes which specs are affected and creates an impact report.
-2. **`/syskit-propose`** — Proposes specific edits to affected specs. You review and approve before any specs are modified.
-3. **`/syskit-plan`** — Creates an implementation task breakdown from approved spec changes.
-4. **`/syskit-implement`** — Executes tasks one by one with verification.
+2. **`/syskit-propose`** — Drafts specific edits to affected specs. You review using `git diff`.
+3. **`/syskit-refine --feedback "<issues>"`** — (Optional) Fix issues in the proposal based on your review. Repeatable.
+4. **`/syskit-approve`** — Approve changes when satisfied. Works across sessions — review overnight if needed.
+5. **`/syskit-plan`** — Creates an implementation task breakdown from approved spec changes.
+6. **`/syskit-implement`** — Executes tasks one by one with verification.
 
 Also mention helper scripts for creating new documents:
 - `.syskit/scripts/new-req.sh <name>` — Create a new requirement (use `--parent REQ-NNN` for child)

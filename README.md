@@ -46,11 +46,15 @@ my-project/
 │   ├── interfaces/
 │   │   ├── README.md
 │   │   └── int_000_template.md
-│   └── design/
+│   ├── design/
+│   │   ├── README.md
+│   │   ├── unit_000_template.md
+│   │   ├── design_decisions.md
+│   │   └── concept_of_execution.md
+│   └── verification/
 │       ├── README.md
-│       ├── unit_000_template.md
-│       ├── design_decisions.md
-│       └── concept_of_execution.md
+│       ├── ver_000_template.md
+│       └── test_strategy.md
 └── .syskit/
     ├── AGENTS.md
     ├── manifest.md
@@ -61,6 +65,7 @@ my-project/
     │   ├── new-req.sh
     │   ├── new-int.sh
     │   ├── new-unit.sh
+    │   ├── new-ver.sh
     │   ├── find-task.sh
     │   ├── assemble-chunks.sh
     │   ├── toc-update.sh
@@ -115,11 +120,13 @@ For large changes affecting many documents, use `/syskit-refine` to review one d
 .syskit/scripts/new-req.sh spi_interface
 .syskit/scripts/new-int.sh register_map
 .syskit/scripts/new-unit.sh spi_slave
+.syskit/scripts/new-ver.sh framebuffer_approval
 
-# Child documents (dot-notation hierarchy: REQ-001.01, INT-002.01, UNIT-003.01)
+# Child documents (dot-notation hierarchy: REQ-001.01, INT-002.01, UNIT-003.01, VER-001.01)
 .syskit/scripts/new-req.sh --parent REQ-001 voltage_levels
 .syskit/scripts/new-int.sh --parent INT-002 uart_registers
 .syskit/scripts/new-unit.sh --parent UNIT-003 pid_controller
+.syskit/scripts/new-ver.sh --parent VER-001 edge_cases
 ```
 
 ### Updating the Manifest
@@ -168,12 +175,19 @@ Data layouts, register maps, protocol encodings, and field definitions belong he
 - `unit_NNN_<name>.md` — Software/hardware unit descriptions (referenced as `UNIT-NNN`)
 - `unit_NNN.NN_<name>.md` — Child units (referenced as `UNIT-NNN.NN`)
 
+### Verification (`doc/verification/`)
+
+- `test_strategy.md` — Cross-cutting test strategy: frameworks, tools, coverage goals, and approaches
+- `ver_NNN_<name>.md` — Verification procedures (referenced as `VER-NNN`)
+- `ver_NNN.NN_<name>.md` — Child verifications (referenced as `VER-NNN.NN`)
+
 ### Cross-References
 
-Documents link to each other using `REQ-NNN`, `INT-NNN`, and `UNIT-NNN` identifiers to create a traceability web:
+Documents link to each other using `REQ-NNN`, `INT-NNN`, `UNIT-NNN`, and `VER-NNN` identifiers to create a traceability web:
 
-- Requirements → interfaces they constrain, design units that implement them
+- Requirements → interfaces they constrain, design units that implement them, verifications that prove them
 - Design units → requirements they satisfy, interfaces they provide or consume
+- Verifications → requirements they verify, design units they exercise
 
 ## Development
 

@@ -3560,9 +3560,9 @@ You are reviewing and approving (or rejecting) proposed specification changes fr
 
 ### Step 0: Context Check
 
-If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, IMPLEMENT_SUMMARY, or REFINE_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
+If this conversation already contains output from a previous syskit command (look for any `*_SUMMARY` markers or previous `/syskit-*` command invocations), STOP and tell the user:
 
-"This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-approve` — all progress is saved to disk and will be picked up automatically."
+"Start a fresh conversation to run `/syskit-approve` — all progress is saved to disk and will be picked up automatically."
 
 If the user explicitly included `--continue` in their command, skip this check and proceed.
 
@@ -3634,9 +3634,7 @@ Tell the user:
 
 "Changes approved. Status updated in `.syskit/analysis/<folder>/proposed_changes.md`.
 
-Next step: run `/syskit-plan` to create an implementation task breakdown.
-
-Tip: Start a new conversation before running the next command to free up context."
+Next step: run `/syskit-plan` to create an implementation task breakdown. You can run it right here in this conversation or start a new one."
 __SYSKIT_TEMPLATE_END__
 
 # --- .claude/commands/syskit-guide.md ---
@@ -3864,9 +3862,9 @@ $ARGUMENTS.change
 
 ### Step 0: Context Check
 
-If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, IMPLEMENT_SUMMARY, or REFINE_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
+If this conversation already contains output from a previous syskit command (look for any `*_SUMMARY` markers or previous `/syskit-*` command invocations), STOP and tell the user:
 
-"This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-impact` — all progress is saved to disk and will be picked up automatically."
+"Impact analysis should start in a fresh conversation. All progress is saved to disk and will be picked up automatically."
 
 If the user explicitly included `--continue` in their command, skip this check and proceed.
 
@@ -3948,9 +3946,7 @@ Tell the user:
 
 "Impact analysis complete. Results saved to `.syskit/analysis/<folder>/impact.md`.
 
-Next step: run `/syskit-propose` to propose specification changes based on this analysis.
-
-Tip: Start a new conversation before running the next command to free up context."
+Next step: run `/syskit-propose` to propose specification changes based on this analysis. You can run it right here in this conversation or start a new one."
 __SYSKIT_TEMPLATE_END__
 
 # --- .claude/commands/syskit-implement.md ---
@@ -3972,9 +3968,9 @@ You are orchestrating implementation of tasks from the current implementation pl
 
 ### Step 0: Context Check
 
-If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, or IMPLEMENT_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
+If this conversation already contains output from a previous syskit command (look for any `*_SUMMARY` markers or previous `/syskit-*` command invocations), STOP and tell the user:
 
-"This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-implement` — all progress is saved to disk and will be picked up automatically."
+"Each implementation task needs its own fresh conversation to avoid context pollution between tasks. All progress is saved to disk and will be picked up automatically."
 
 If the user explicitly included `--continue` in their command, skip this check and proceed.
 
@@ -4081,9 +4077,18 @@ You are creating an implementation task breakdown based on approved specificatio
 
 ### Step 0: Context Check
 
-If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, or IMPLEMENT_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
+Check if this conversation already contains output from a previous syskit command (look for any `*_SUMMARY` markers or previous `/syskit-*` command invocations).
 
-"This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-plan` — all progress is saved to disk and will be picked up automatically."
+**Allowed transitions:** `/syskit-plan` may run in the same conversation after any of these commands complete with approval:
+- `/syskit-propose` (after the user approved inline)
+- `/syskit-refine` (after the user approved inline)
+- `/syskit-approve` (after the user approved)
+
+These are natural workflow continuations — the user just approved changes and wants to proceed to planning.
+
+**Blocked transitions:** If the conversation contains IMPACT_SUMMARY, IMPLEMENT_SUMMARY, or PLAN_SUMMARY markers (indicating heavy prior context or a repeated plan attempt), STOP and tell the user:
+
+"Start a fresh conversation to run `/syskit-plan` — all progress is saved to disk and will be picked up automatically."
 
 If the user explicitly included `--continue` in their command, skip this check and proceed.
 
@@ -4174,9 +4179,13 @@ You are proposing specific modifications to specifications based on a completed 
 
 ### Step 0: Context Check
 
-If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, or IMPLEMENT_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
+Check if this conversation already contains output from a previous syskit command (look for any `*_SUMMARY` markers or previous `/syskit-*` command invocations).
 
-"This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-propose` — all progress is saved to disk and will be picked up automatically."
+**Allowed transitions:** `/syskit-propose` may run in the same conversation after `/syskit-impact` completes (IMPACT_SUMMARY is the only marker present). This is a natural workflow continuation.
+
+**Blocked transitions:** If the conversation contains PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, IMPLEMENT_SUMMARY, or REFINE_SUMMARY markers, STOP and tell the user:
+
+"Start a fresh conversation to run `/syskit-propose` — all progress is saved to disk and will be picked up automatically."
 
 If the user explicitly included `--continue` in their command, skip this check and proceed.
 
@@ -4318,9 +4327,7 @@ After applying approved changes, tell the user:
 
 "Changes approved. Summary saved to `.syskit/analysis/<folder>/proposed_changes.md`.
 
-Next step: run `/syskit-plan` to create an implementation task breakdown.
-
-Tip: Start a new conversation before running the next command to free up context."
+Next step: run `/syskit-plan` to create an implementation task breakdown. You can run it right here in this conversation or start a new one."
 __SYSKIT_TEMPLATE_END__
 
 # --- .claude/commands/syskit-refine.md ---
@@ -4345,9 +4352,9 @@ You are refining previously proposed specification changes based on the user's r
 
 ### Step 0: Context Check
 
-If this conversation already contains output from a previous syskit command (look for IMPACT_SUMMARY, PROPOSE_SUMMARY, CHUNK_SUMMARY, PLAN_SUMMARY, IMPLEMENT_SUMMARY, or REFINE_SUMMARY markers, or previous `/syskit-*` command invocations), STOP and tell the user:
+If this conversation already contains output from a previous syskit command (look for any `*_SUMMARY` markers or previous `/syskit-*` command invocations), STOP and tell the user:
 
-"This conversation already has syskit command history in context. Start a fresh conversation to run `/syskit-refine` — all progress is saved to disk and will be picked up automatically."
+"Refine needs a fresh conversation to cleanly re-read your current doc state. All progress is saved to disk and will be picked up automatically."
 
 If the user explicitly included `--continue` in their command, skip this check and proceed.
 
@@ -4458,9 +4465,7 @@ Tell the user:
 
 "Changes approved. Status updated in `.syskit/analysis/<folder>/proposed_changes.md`.
 
-Next step: run `/syskit-plan` to create an implementation task breakdown.
-
-Tip: Start a new conversation before running the next command to free up context."
+Next step: run `/syskit-plan` to create an implementation task breakdown. You can run it right here in this conversation or start a new one."
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/templates/CLAUDE_SYSKIT.md ---

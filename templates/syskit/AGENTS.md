@@ -32,7 +32,15 @@ Reference material for subagents:
 - **Design Units** (`unit_NNN_<name>.md`) — HOW the system works. Links to requirements and interfaces.
 - **Verification** (`ver_NNN_<name>.md`) — HOW requirements are verified. Links to requirements and design units.
 
-For detailed format specifications, see `.syskit/ref/document-formats.md`.
+## Key Principle
+
+**Reference, don't reproduce.** Don't restate information that is defined elsewhere — reference the source.
+
+- **Internal documents:** Reference by ID (`REQ-NNN`, `INT-NNN`, `UNIT-NNN`, `VER-NNN`). Each fact should have exactly one authoritative location in `doc/`.
+- **External standards:** Reference by name, version/year, and section or figure number (e.g., "ISO 26262-6:2018 §8.4.4", "RFC 9293 §3.1", "PNG 1.2 §4.1.3"). Don't paraphrase normative text — cite the section that defines it.
+- **Scope:** Applies to specification documents and code (comments, docstrings). Working files in `.syskit/` are exempt.
+
+For detailed format and style guidance, see `.syskit/ref/document-formats.md`.
 
 ## Workflows
 

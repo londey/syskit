@@ -49,8 +49,9 @@ if [ -n "$PARENT" ]; then
         if [ -f "$f" ]; then
             CHILD_NUM=$(basename "$f" | sed "s/ver_${PARENT_NUM}\.\([0-9][0-9]\)_.*/\1/" | sed 's/^0*//')
             CHILD_NUM=${CHILD_NUM:-0}
+            [[ "$CHILD_NUM" =~ ^[1-9][0-9]*$ ]] || continue
             if [ "$CHILD_NUM" -ge "$NEXT_CHILD" ]; then
-                NEXT_CHILD=$((CHILD_NUM + 1))
+                NEXT_CHILD=$((10#$CHILD_NUM + 1))
             fi
         fi
     done
@@ -68,8 +69,9 @@ else
         if [ -f "$f" ]; then
             NUM=$(basename "$f" | sed 's/ver_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
             NUM=${NUM:-0}  # Default to 0 if empty
+            [[ "$NUM" =~ ^[1-9][0-9]*$ ]] || continue
             if [ "$NUM" -ge "$NEXT_NUM" ]; then
-                NEXT_NUM=$((NUM + 1))
+                NEXT_NUM=$((10#$NUM + 1))
             fi
         fi
     done

@@ -560,8 +560,16 @@ for f in "$TASK_FOLDER"/task_[0-9][0-9][0-9]_*.md; do
 
     if [ -n "$REQUESTED_TASK" ]; then
         # Match by task number (with or without leading zeros)
-        req_num=$((10#$REQUESTED_TASK)) 2>/dev/null || req_num="$REQUESTED_TASK"
-        file_num=$((10#$num)) 2>/dev/null || file_num="$num"
+        if [[ "$REQUESTED_TASK" =~ ^[0-9]+$ ]]; then
+            req_num=$((10#$REQUESTED_TASK))
+        else
+            req_num="$REQUESTED_TASK"
+        fi
+        if [[ "$num" =~ ^[0-9]+$ ]]; then
+            file_num=$((10#$num))
+        else
+            file_num="$num"
+        fi
         if [ "$req_num" = "$file_num" ] && [ -z "$TASK_FILE" ]; then
             TASK_FILE="$f"
             TASK_NUMBER="$num"
@@ -627,9 +635,17 @@ if [ -n "$DEPS_LINE" ]; then
 
     for dep_num in $dep_nums; do
         # Skip if it's the same task
-        task_num_int=$((10#$TASK_NUMBER))
-        dep_num_int=$((10#$dep_num))
-        [ "$dep_num_int" -eq "$task_num_int" ] 2>/dev/null && continue
+        if [[ "$TASK_NUMBER" =~ ^[0-9]+$ ]]; then
+            task_num_int=$((10#$TASK_NUMBER))
+        else
+            task_num_int="$TASK_NUMBER"
+        fi
+        if [[ "$dep_num" =~ ^[0-9]+$ ]]; then
+            dep_num_int=$((10#$dep_num))
+        else
+            dep_num_int="$dep_num"
+        fi
+        [ "$dep_num_int" = "$task_num_int" ] && continue
 
         # Find the dependency task file
         dep_padded=$(printf "%03d" "$dep_num_int")
@@ -1408,8 +1424,9 @@ if [ -n "$PARENT" ]; then
         if [ -f "$f" ]; then
             CHILD_NUM=$(basename "$f" | sed "s/int_${PARENT_NUM}\.\([0-9][0-9]\)_.*/\1/" | sed 's/^0*//')
             CHILD_NUM=${CHILD_NUM:-0}
+            [[ "$CHILD_NUM" =~ ^[1-9][0-9]*$ ]] || continue
             if [ "$CHILD_NUM" -ge "$NEXT_CHILD" ]; then
-                NEXT_CHILD=$((CHILD_NUM + 1))
+                NEXT_CHILD=$((10#$CHILD_NUM + 1))
             fi
         fi
     done
@@ -1427,8 +1444,9 @@ else
         if [ -f "$f" ]; then
             NUM=$(basename "$f" | sed 's/int_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
             NUM=${NUM:-0}  # Default to 0 if empty
+            [[ "$NUM" =~ ^[1-9][0-9]*$ ]] || continue
             if [ "$NUM" -ge "$NEXT_NUM" ]; then
-                NEXT_NUM=$((NUM + 1))
+                NEXT_NUM=$((10#$NUM + 1))
             fi
         fi
     done
@@ -1547,8 +1565,9 @@ if [ -n "$PARENT" ]; then
         if [ -f "$f" ]; then
             CHILD_NUM=$(basename "$f" | sed "s/req_${PARENT_NUM}\.\([0-9][0-9]\)_.*/\1/" | sed 's/^0*//')
             CHILD_NUM=${CHILD_NUM:-0}
+            [[ "$CHILD_NUM" =~ ^[1-9][0-9]*$ ]] || continue
             if [ "$CHILD_NUM" -ge "$NEXT_CHILD" ]; then
-                NEXT_CHILD=$((CHILD_NUM + 1))
+                NEXT_CHILD=$((10#$CHILD_NUM + 1))
             fi
         fi
     done
@@ -1566,8 +1585,9 @@ else
         if [ -f "$f" ]; then
             NUM=$(basename "$f" | sed 's/req_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
             NUM=${NUM:-0}  # Default to 0 if empty
+            [[ "$NUM" =~ ^[1-9][0-9]*$ ]] || continue
             if [ "$NUM" -ge "$NEXT_NUM" ]; then
-                NEXT_NUM=$((NUM + 1))
+                NEXT_NUM=$((10#$NUM + 1))
             fi
         fi
     done
@@ -1692,8 +1712,9 @@ if [ -n "$PARENT" ]; then
         if [ -f "$f" ]; then
             CHILD_NUM=$(basename "$f" | sed "s/unit_${PARENT_NUM}\.\([0-9][0-9]\)_.*/\1/" | sed 's/^0*//')
             CHILD_NUM=${CHILD_NUM:-0}
+            [[ "$CHILD_NUM" =~ ^[1-9][0-9]*$ ]] || continue
             if [ "$CHILD_NUM" -ge "$NEXT_CHILD" ]; then
-                NEXT_CHILD=$((CHILD_NUM + 1))
+                NEXT_CHILD=$((10#$CHILD_NUM + 1))
             fi
         fi
     done
@@ -1711,8 +1732,9 @@ else
         if [ -f "$f" ]; then
             NUM=$(basename "$f" | sed 's/unit_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
             NUM=${NUM:-0}  # Default to 0 if empty
+            [[ "$NUM" =~ ^[1-9][0-9]*$ ]] || continue
             if [ "$NUM" -ge "$NEXT_NUM" ]; then
-                NEXT_NUM=$((NUM + 1))
+                NEXT_NUM=$((10#$NUM + 1))
             fi
         fi
     done
@@ -1845,8 +1867,9 @@ if [ -n "$PARENT" ]; then
         if [ -f "$f" ]; then
             CHILD_NUM=$(basename "$f" | sed "s/ver_${PARENT_NUM}\.\([0-9][0-9]\)_.*/\1/" | sed 's/^0*//')
             CHILD_NUM=${CHILD_NUM:-0}
+            [[ "$CHILD_NUM" =~ ^[1-9][0-9]*$ ]] || continue
             if [ "$CHILD_NUM" -ge "$NEXT_CHILD" ]; then
-                NEXT_CHILD=$((CHILD_NUM + 1))
+                NEXT_CHILD=$((10#$CHILD_NUM + 1))
             fi
         fi
     done
@@ -1864,8 +1887,9 @@ else
         if [ -f "$f" ]; then
             NUM=$(basename "$f" | sed 's/ver_\([0-9]*\)_.*/\1/' | sed 's/^0*//')
             NUM=${NUM:-0}  # Default to 0 if empty
+            [[ "$NUM" =~ ^[1-9][0-9]*$ ]] || continue
             if [ "$NUM" -ge "$NEXT_NUM" ]; then
-                NEXT_NUM=$((NUM + 1))
+                NEXT_NUM=$((10#$NUM + 1))
             fi
         fi
     done

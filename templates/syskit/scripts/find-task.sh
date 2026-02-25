@@ -84,8 +84,16 @@ for f in "$TASK_FOLDER"/task_[0-9][0-9][0-9]_*.md; do
 
     if [ -n "$REQUESTED_TASK" ]; then
         # Match by task number (with or without leading zeros)
-        req_num=$((10#$REQUESTED_TASK)) 2>/dev/null || req_num="$REQUESTED_TASK"
-        file_num=$((10#$num)) 2>/dev/null || file_num="$num"
+        if [[ "$REQUESTED_TASK" =~ ^[0-9]+$ ]]; then
+            req_num=$((10#$REQUESTED_TASK))
+        else
+            req_num="$REQUESTED_TASK"
+        fi
+        if [[ "$num" =~ ^[0-9]+$ ]]; then
+            file_num=$((10#$num))
+        else
+            file_num="$num"
+        fi
         if [ "$req_num" = "$file_num" ] && [ -z "$TASK_FILE" ]; then
             TASK_FILE="$f"
             TASK_NUMBER="$num"
@@ -151,9 +159,17 @@ if [ -n "$DEPS_LINE" ]; then
 
     for dep_num in $dep_nums; do
         # Skip if it's the same task
-        task_num_int=$((10#$TASK_NUMBER))
-        dep_num_int=$((10#$dep_num))
-        [ "$dep_num_int" -eq "$task_num_int" ] 2>/dev/null && continue
+        if [[ "$TASK_NUMBER" =~ ^[0-9]+$ ]]; then
+            task_num_int=$((10#$TASK_NUMBER))
+        else
+            task_num_int="$TASK_NUMBER"
+        fi
+        if [[ "$dep_num" =~ ^[0-9]+$ ]]; then
+            dep_num_int=$((10#$dep_num))
+        else
+            dep_num_int="$dep_num"
+        fi
+        [ "$dep_num_int" = "$task_num_int" ] && continue
 
         # Find the dependency task file
         dep_padded=$(printf "%03d" "$dep_num_int")

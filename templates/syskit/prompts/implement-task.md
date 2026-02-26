@@ -19,7 +19,7 @@ Read your task file at `{{TASK_FILE}}`. Extract:
 - Files to modify and files to create
 - Implementation steps
 - Verification criteria
-- Specification references (REQ-NNN, INT-NNN, UNIT-NNN)
+- Specification references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN)
 
 ### 2. Read Referenced Files
 
@@ -37,7 +37,8 @@ Follow the task's implementation steps:
 1. Make the changes described in the task
 2. Edit files directly — do not write to a staging folder
 3. Ensure changes align with the referenced specifications
-4. When creating new source files that implement a design unit, add a placeholder Spec-ref comment:
+4. If the task references VER-NNN documents and implementation changes affect verified behavior, update the verification document's Procedure and Expected Results sections to match
+5. When creating new source files that implement a design unit, add a placeholder Spec-ref comment:
    ```
    // Spec-ref: unit_NNN_name.md `0000000000000000` 1970-01-01
    ```

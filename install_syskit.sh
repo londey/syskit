@@ -2809,13 +2809,16 @@ You are analyzing the impact of a proposed change on specification documents.
    - `doc/requirements/`
    - `doc/interfaces/`
    - `doc/design/`
+   - `doc/verification/`
+
+   Also read `ARCHITECTURE.md` from the project root (it contains manually-written sections and an auto-generated block diagram).
 
    Skip any files with `_000_template` in the name.
 
 2. For each document, extract:
-   - The document ID (from the H1 heading, e.g., "REQ-001", "INT-003", "UNIT-007")
-   - The document title (from the H1 heading after the ID)
-   - All cross-references to other documents (REQ-NNN, INT-NNN, UNIT-NNN mentions)
+   - The document ID: for numbered specs, extract from the H1 heading (e.g., "REQ-001", "INT-003", "UNIT-007", "VER-002"). For framework documents (README.md, quality_metrics.md, states_and_modes.md, concept_of_execution.md, design_decisions.md, test_strategy.md) and ARCHITECTURE.md, use the filename as the identifier.
+   - The document title (from the H1 heading)
+   - All cross-references to other documents (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN mentions)
    - A brief summary of what the document specifies (1-2 sentences)
 
 3. Analyze each document against the proposed change. Categorize as:
@@ -2827,8 +2830,10 @@ You are analyzing the impact of a proposed change on specification documents.
    When tracing dependencies:
    - If a requirement is DIRECT, check which design units have it in "Implements Requirements" (those are DEPENDENT)
    - If a requirement is DIRECT, check which interfaces it lists under "Interfaces" (those are INTERFACE)
+   - If a requirement is DIRECT, check which verifications have it in "Verifies Requirements" (those are DEPENDENT)
    - If an interface is DIRECT or INTERFACE, check which units list it under "Provides" or "Consumes" (those are DEPENDENT)
    - If a design unit is DIRECT, check which requirements it implements (review for DEPENDENT impact)
+   - If a design unit is DIRECT, check which verifications have it in "Verified Design Units" (those are DEPENDENT)
 
 4. Write your complete analysis to `{{ANALYSIS_FOLDER}}/impact.md` in this format:
 
@@ -2845,7 +2850,7 @@ You are analyzing the impact of a proposed change on specification documents.
    ## Direct Impacts
 
    ### <filename>
-   - **ID:** <REQ/INT/UNIT-NNN>
+   - **ID:** <REQ/INT/UNIT/VER-NNN or filename for framework docs>
    - **Title:** <document title>
    - **Impact:** <what specifically is affected, 1-2 sentences>
    - **Action Required:** <modify/review/no change>
@@ -2864,7 +2869,7 @@ You are analyzing the impact of a proposed change on specification documents.
    ## Dependent Impacts
 
    ### <filename>
-   - **ID:** <REQ/INT/UNIT-NNN>
+   - **ID:** <REQ/INT/UNIT/VER-NNN or filename for framework docs>
    - **Title:** <document title>
    - **Dependency:** <what it depends on that is changing, with specific ID>
    - **Impact:** <what specifically is affected>
@@ -2923,7 +2928,7 @@ Read your task file at `{{TASK_FILE}}`. Extract:
 - Files to modify and files to create
 - Implementation steps
 - Verification criteria
-- Specification references (REQ-NNN, INT-NNN, UNIT-NNN)
+- Specification references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN)
 
 ### 2. Read Referenced Files
 
@@ -2941,7 +2946,8 @@ Follow the task's implementation steps:
 1. Make the changes described in the task
 2. Edit files directly — do not write to a staging folder
 3. Ensure changes align with the referenced specifications
-4. When creating new source files that implement a design unit, add a placeholder Spec-ref comment:
+4. If the task references VER-NNN documents and implementation changes affect verified behavior, update the verification document's Procedure and Expected Results sections to match
+5. When creating new source files that implement a design unit, add a placeholder Spec-ref comment:
    ```
    // Spec-ref: unit_NNN_name.md `0000000000000000` 1970-01-01
    ```
@@ -3006,22 +3012,30 @@ You are extracting implementation scope from approved specification changes.
 
 1. Read the change summary from: `{{ANALYSIS_FOLDER}}/proposed_changes.md`
 
-2. Run `git diff doc/` to see the exact specification changes that were applied.
+2. Run `git diff doc/ ARCHITECTURE.md` to see the exact specification changes that were applied.
 
 3. Read all design unit documents (`doc/design/unit_*.md`) to understand implementation structure. Focus especially on:
    - The `## Implementation` section (lists source files)
    - The `## Implements Requirements` section (links to REQ-NNN)
    - The `## Provides` and `## Consumes` sections (links to INT-NNN)
 
-4. For each specification change, identify:
+4. Read verification documents (`doc/verification/ver_*.md`) that cover affected requirements or design units. Focus especially on:
+   - The `## Verifies Requirements` section (links to REQ-NNN)
+   - The `## Verified Design Units` section (links to UNIT-NNN)
+   - The `## Test Implementation` section (lists test source files)
+
+5. If the changes affected framework documents (quality_metrics.md, states_and_modes.md, concept_of_execution.md, design_decisions.md, test_strategy.md, README.md files) or `ARCHITECTURE.md`, read those files to understand what changed and whether implementation tasks are needed.
+
+6. For each specification change, identify:
    - Which source files need modification (from design unit Implementation sections)
-   - Which test files need modification or creation
+   - Which test files need modification or creation (from design unit and verification Test Implementation sections)
+   - Which verification documents need updating if requirements or design unit behavior changed
    - Dependencies between changes (what must be done first)
    - How to verify the change was implemented correctly
 
-5. Create the task folder: `{{TASK_FOLDER}}`
+7. Create the task folder: `{{TASK_FOLDER}}`
 
-6. Write `plan.md` to the task folder:
+8. Write `plan.md` to the task folder:
 
    ```markdown
    # Implementation Plan: <change name>
@@ -3060,14 +3074,14 @@ You are extracting implementation scope from approved specification changes.
    - <risk or consideration>
    ```
 
-7. Write individual task files `task_NNN_<name>.md` to the task folder:
+9. Write individual task files `task_NNN_<name>.md` to the task folder:
 
    ```markdown
    # Task NNN: <task name>
 
    Status: Pending
    Dependencies: <list or "None">
-   Specification References: <REQ-NNN, INT-NNN, UNIT-NNN>
+   Specification References: <REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN>
 
    ## Objective
 
@@ -3097,7 +3111,7 @@ You are extracting implementation scope from approved specification changes.
    <Any additional context or considerations>
    ```
 
-8. After writing all files, return ONLY this compact summary (nothing else):
+10. After writing all files, return ONLY this compact summary (nothing else):
 
    PLAN_SUMMARY_START
    Task folder: <path to task folder>
@@ -3133,11 +3147,12 @@ You are drafting and applying proposed specification changes for a subset of aff
 
 1. Read the impact analysis from: `{{ANALYSIS_FOLDER}}/impact.md`
 
-2. Read ONLY the documents assigned to you (listed above) from the `doc/` directories.
+2. Read ONLY the documents assigned to you (listed above) from the `doc/` directories, or from the project root for `ARCHITECTURE.md`.
 
 3. For each assigned document, **edit the file directly** with the proposed changes:
    - Make the specific modifications needed to address the proposed change
-   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
+   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN) remain consistent
+   - For verification documents, ensure "Verifies Requirements" and "Verified Design Units" sections reflect the current requirements and design units. Update the Procedure and Expected Results sections if the verified behavior changed.
    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
    - **Document style rules** (critical):
      - Write what the system *is now*, not how it changed. No changelog-style language ("previously", "was changed to", "updated from"). The git diff is the changelog.
@@ -3201,11 +3216,12 @@ You are drafting and applying proposed specification changes based on a complete
 
 1. Read the impact analysis from: `{{ANALYSIS_FOLDER}}/impact.md`
 
-2. Read each document listed as affected (DIRECT, INTERFACE, or DEPENDENT with Action Required of "modify" or "review"). Read them from the `doc/` directories.
+2. Read each document listed as affected (DIRECT, INTERFACE, or DEPENDENT with Action Required of "modify" or "review"). Read them from the `doc/` directories, or from the project root for `ARCHITECTURE.md`.
 
 3. For each affected document, **edit the file directly** with the proposed changes:
    - Make the specific modifications needed to address the proposed change
-   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
+   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN) remain consistent
+   - For verification documents, ensure "Verifies Requirements" and "Verified Design Units" sections reflect the current requirements and design units. Update the Procedure and Expected Results sections if the verified behavior changed.
    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
    - **Document style rules** (critical):
      - Write what the system *is now*, not how it changed. No changelog-style language ("previously", "was changed to", "updated from"). The git diff is the changelog.
@@ -3283,8 +3299,9 @@ Check each modified document for:
 1. Requirement statements use condition/response format ("When X, the system SHALL Y")
 2. No implementation details in requirements (data layouts, register fields belong in interfaces)
 3. Each requirement is singular (not compound)
-4. Cross-references (REQ-NNN, INT-NNN, UNIT-NNN) are valid and consistent
-5. Changes align with the rationale described in proposed_changes.md
+4. Cross-references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN) are valid and consistent
+5. For verification documents: "Verifies Requirements" references valid REQ-NNN IDs and "Verified Design Units" references valid UNIT-NNN IDs
+6. Changes align with the rationale described in proposed_changes.md
 
 If you find fixable issues, edit the doc files directly to correct them.
 
@@ -3323,7 +3340,7 @@ The following documents may need modification based on the feedback:
 
 2. Read the change summary from: `{{ANALYSIS_FOLDER}}/proposed_changes.md` — read the `## Change Summary` table to understand what was originally proposed.
 
-3. Read each file listed in the affected files above from the `doc/` directories. These files already contain the proposed changes (uncommitted).
+3. Read each file listed in the affected files above from the `doc/` directories (or from the project root for `ARCHITECTURE.md`). These files already contain the proposed changes (uncommitted).
 
 4. Run `git diff -- <file>` for each affected file to see what was changed by the original proposal. This helps you understand the baseline and avoid undoing correct changes.
 
@@ -3332,7 +3349,8 @@ The following documents may need modification based on the feedback:
 6. For each document that needs changes, **edit the file directly**:
    - Make the specific modifications needed to address the user's feedback
    - Preserve correct changes from the original proposal — only modify what the feedback asks for
-   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
+   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN) remain consistent
+   - For verification documents, ensure "Verifies Requirements" and "Verified Design Units" sections reflect the current requirements and design units. Update the Procedure and Expected Results sections if the verified behavior changed.
    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
    - **Document style rules** (critical):
      - Write what the system *is now*, not how it changed. No changelog-style language ("previously", "was changed to", "updated from"). The git diff is the changelog.
@@ -3622,17 +3640,17 @@ If `Status:` is not "Pending Approval", tell the user the current status and sug
 
 ### Step 2: Check for Uncommitted Changes
 
-Run `git status -- doc/` to verify there are uncommitted changes in the doc directory.
+Run `git status -- doc/ ARCHITECTURE.md` to verify there are uncommitted changes in the doc directory or ARCHITECTURE.md.
 
-If there are **no** uncommitted changes in `doc/`:
+If there are **no** uncommitted changes:
 
-Tell the user: "No uncommitted changes found in `doc/`. The proposed changes may have already been committed or reverted. Check `git log -- doc/` for recent commits, or re-run `/syskit-propose` to regenerate changes."
+Tell the user: "No uncommitted changes found in `doc/` or `ARCHITECTURE.md`. The proposed changes may have already been committed or reverted. Check `git log -- doc/` for recent commits, or re-run `/syskit-propose` to regenerate changes."
 
 ### Step 3: Show Change Summary
 
 Read the change summary table from `proposed_changes.md` (the `## Change Summary` section, typically a markdown table).
 
-Run `git diff --stat -- doc/` to get a compact summary of what files changed.
+Run `git diff --stat -- doc/ ARCHITECTURE.md` to get a compact summary of what files changed.
 
 Present to the user:
 
@@ -3645,19 +3663,19 @@ Present to the user:
 **Files changed:**
 <paste git diff --stat output>
 
-Review the full diff with `git diff doc/` or your editor's source control panel.
+Review the full diff with `git diff doc/ ARCHITECTURE.md` or your editor's source control panel.
 
 Reply with:
 - **'approve'** to accept all changes and proceed to planning
 - **'approve \<filename\>'** to keep changes to specific file(s) and revert others
-- **'reject'** to revert all changes (`git checkout -- doc/`)
+- **'reject'** to revert all changes (`git checkout -- doc/ ARCHITECTURE.md`)
 - **'refine'** to describe issues and run `/syskit-refine` instead"
 
 ### Step 4: Handle Response
 
 - **approve:** Update `Status: Pending Approval` to `Status: Approved` in `.syskit/analysis/<folder>/proposed_changes.md`. Proceed to Step 5.
 - **approve \<filename\>:** Revert all other changed doc files with `git checkout -- doc/<other files>`, keeping only the specified file(s). Update `Status: Pending Approval` to `Status: Approved` in `proposed_changes.md`. Proceed to Step 5.
-- **reject:** Run `git checkout -- doc/` to revert all changes. Tell the user the proposal has been discarded.
+- **reject:** Run `git checkout -- doc/ ARCHITECTURE.md` to revert all changes. Tell the user the proposal has been discarded.
 - **refine:** Tell the user to start a new conversation and run `/syskit-refine --feedback "<their feedback>"` to iterate on the changes.
 
 ### Step 5: Next Steps
@@ -4087,7 +4105,7 @@ Next: run `/syskit-implement` in a new conversation to continue with the next pe
 
 3. If no, run `.syskit/scripts/manifest.sh` to update the manifest, then report: "All tasks complete. Manifest updated."
 
-Also remind to update any design documents if implementation details changed.
+Also remind to update any design or verification documents if implementation details changed the behavior of verified requirements or design units.
 __SYSKIT_TEMPLATE_END__
 
 # --- .claude/commands/syskit-plan.md ---
@@ -4223,11 +4241,11 @@ If the user explicitly included `--continue` in their command, skip this check a
 
 ### Step 1: Check Git Status
 
-Run `git status -- doc/` to check for uncommitted changes in the doc directory.
+Run `git status -- doc/ ARCHITECTURE.md` to check for uncommitted changes in the doc directory or ARCHITECTURE.md.
 
-If there are uncommitted changes in `doc/`, **stop and tell the user:**
+If there are uncommitted changes, **stop and tell the user:**
 
-"There are uncommitted changes in `doc/`. Please commit or stash them before running `/syskit-propose`, so that proposed changes can be reviewed with `git diff` and reverted cleanly if needed."
+"There are uncommitted changes in `doc/` or `ARCHITECTURE.md`. Please commit or stash them before running `/syskit-propose`, so that proposed changes can be reviewed with `git diff` and reverted cleanly if needed."
 
 ### Step 2: Load the Impact Analysis
 
@@ -4329,7 +4347,7 @@ The subagent will return a summary in `VALIDATION_SUMMARY_START`/`VALIDATION_SUM
 
 Tell the user:
 
-"Proposed changes have been applied directly to the doc files. Review the changes using `git diff doc/` or the VSCode source control panel.
+"Proposed changes have been applied directly to the doc files. Review the changes using `git diff doc/ ARCHITECTURE.md` or the VSCode source control panel.
 
 **Summary:**
 <paste the change summary table from the subagent's returned summary>
@@ -4340,7 +4358,7 @@ Reply with:
 - **'approve'** to keep all changes and proceed to planning
 - **'approve \<filename\>'** to keep changes to a specific file and revert others
 - **'revise \<filename\>'** to discuss modifications to a specific file
-- **'reject'** to revert all changes (`git checkout -- doc/`)
+- **'reject'** to revert all changes (`git checkout -- doc/ ARCHITECTURE.md`)
 
 Or review at your leisure and use these commands in a new session:
 - **`/syskit-refine --feedback \"<your feedback>\"`** to iterate on the proposed changes
@@ -4351,7 +4369,7 @@ Or review at your leisure and use these commands in a new session:
 - **approve:** Update `Status: Pending Approval` to `Status: Approved` in `.syskit/analysis/<folder>/proposed_changes.md`. Proceed to Step 9.
 - **approve \<filename\>:** Revert all other files with `git checkout -- doc/<other files>`, keep the specified file(s). Update `Status: Pending Approval` to `Status: Approved` in `.syskit/analysis/<folder>/proposed_changes.md`. Proceed to Step 9.
 - **revise \<filename\>:** Discuss the specific file with the user, make adjustments, then re-present.
-- **reject:** Run `git checkout -- doc/` to revert all changes. Tell the user the proposal has been discarded.
+- **reject:** Run `git checkout -- doc/ ARCHITECTURE.md` to revert all changes. Tell the user the proposal has been discarded.
 
 ### Step 9: Next Steps
 
@@ -4392,11 +4410,11 @@ If the user explicitly included `--continue` in their command, skip this check a
 
 ### Step 1: Check for Pending Proposed Changes
 
-Run `git status -- doc/` to check for uncommitted changes in the doc directory.
+Run `git status -- doc/ ARCHITECTURE.md` to check for uncommitted changes in the doc directory or ARCHITECTURE.md.
 
-If there are **no** uncommitted changes in `doc/`, **stop and tell the user:**
+If there are **no** uncommitted changes, **stop and tell the user:**
 
-"No uncommitted changes found in `doc/`. Run `/syskit-propose` first to generate specification changes, then use `/syskit-refine` to iterate on them."
+"No uncommitted changes found in `doc/` or `ARCHITECTURE.md`. Run `/syskit-propose` first to generate specification changes, then use `/syskit-refine` to iterate on them."
 
 ### Step 2: Load the Analysis Context
 
@@ -4428,7 +4446,7 @@ From the user's feedback (`$ARGUMENTS.feedback`), identify which documents are l
 2. Match against the change summary table to identify relevant files
 3. If the feedback is broad or doesn't reference specific documents, include all documents from the change summary
 
-Run `git diff --name-only -- doc/` to get the list of files with uncommitted changes. Cross-reference with the feedback to build the final list of files the subagent should examine and potentially modify.
+Run `git diff --name-only -- doc/ ARCHITECTURE.md` to get the list of files with uncommitted changes. Cross-reference with the feedback to build the final list of files the subagent should examine and potentially modify.
 
 ### Step 4: Delegate Refinement
 
@@ -4461,11 +4479,11 @@ After the subagent(s) return:
 
 ### Step 6: Present Changes for Review
 
-Run `git diff --stat -- doc/` to get the updated change summary.
+Run `git diff --stat -- doc/ ARCHITECTURE.md` to get the updated change summary.
 
 Tell the user:
 
-"Refinement applied based on your feedback. Review the updated changes using `git diff doc/` or the VSCode source control panel.
+"Refinement applied based on your feedback. Review the updated changes using `git diff doc/ ARCHITECTURE.md` or the VSCode source control panel.
 
 **Feedback addressed:**
 $ARGUMENTS.feedback
@@ -4479,7 +4497,7 @@ $ARGUMENTS.feedback
 Reply with:
 - **'approve'** to accept all changes (updates status and proceeds to planning)
 - **'approve \<filename\>'** to keep changes to specific file(s) and revert others
-- **'reject'** to revert ALL changes including the original proposal (`git checkout -- doc/`)
+- **'reject'** to revert ALL changes including the original proposal (`git checkout -- doc/ ARCHITECTURE.md`)
 - **Further feedback** to describe additional issues (will require another `/syskit-refine` run in a new session)
 
 Or review at your leisure and run `/syskit-approve` in a new session when ready."
@@ -4488,7 +4506,7 @@ Or review at your leisure and run `/syskit-approve` in a new session when ready.
 
 - **approve:** Update `Status: Pending Approval` to `Status: Approved` in `.syskit/analysis/<folder>/proposed_changes.md`. Proceed to Step 8.
 - **approve \<filename\>:** Revert non-specified files with `git checkout -- doc/<other files>`, keep the specified file(s). Update Status to "Approved". Proceed to Step 8.
-- **reject:** Run `git checkout -- doc/` to revert all changes (including the original proposal). Tell the user the changes have been discarded.
+- **reject:** Run `git checkout -- doc/ ARCHITECTURE.md` to revert all changes (including the original proposal). Tell the user the changes have been discarded.
 - **Further feedback:** Tell the user to start a new conversation and run `/syskit-refine --feedback "<their new feedback>"`.
 
 ### Step 8: Next Steps

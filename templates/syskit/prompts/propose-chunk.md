@@ -16,11 +16,12 @@ You are drafting and applying proposed specification changes for a subset of aff
 
 1. Read the impact analysis from: `{{ANALYSIS_FOLDER}}/impact.md`
 
-2. Read ONLY the documents assigned to you (listed above) from the `doc/` directories.
+2. Read ONLY the documents assigned to you (listed above) from the `doc/` directories, or from the project root for `ARCHITECTURE.md`.
 
 3. For each assigned document, **edit the file directly** with the proposed changes:
    - Make the specific modifications needed to address the proposed change
-   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
+   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN) remain consistent
+   - For verification documents, ensure "Verifies Requirements" and "Verified Design Units" sections reflect the current requirements and design units. Update the Procedure and Expected Results sections if the verified behavior changed.
    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
    - **Document style rules** (critical):
      - Write what the system *is now*, not how it changed. No changelog-style language ("previously", "was changed to", "updated from"). The git diff is the changelog.

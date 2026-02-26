@@ -20,7 +20,7 @@ The following documents may need modification based on the feedback:
 
 2. Read the change summary from: `{{ANALYSIS_FOLDER}}/proposed_changes.md` — read the `## Change Summary` table to understand what was originally proposed.
 
-3. Read each file listed in the affected files above from the `doc/` directories. These files already contain the proposed changes (uncommitted).
+3. Read each file listed in the affected files above from the `doc/` directories (or from the project root for `ARCHITECTURE.md`). These files already contain the proposed changes (uncommitted).
 
 4. Run `git diff -- <file>` for each affected file to see what was changed by the original proposal. This helps you understand the baseline and avoid undoing correct changes.
 
@@ -29,7 +29,8 @@ The following documents may need modification based on the feedback:
 6. For each document that needs changes, **edit the file directly**:
    - Make the specific modifications needed to address the user's feedback
    - Preserve correct changes from the original proposal — only modify what the feedback asks for
-   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN) remain consistent
+   - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN) remain consistent
+   - For verification documents, ensure "Verifies Requirements" and "Verified Design Units" sections reflect the current requirements and design units. Update the Procedure and Expected Results sections if the verified behavior changed.
    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
    - **Document style rules** (critical):
      - Write what the system *is now*, not how it changed. No changelog-style language ("previously", "was changed to", "updated from"). The git diff is the changelog.

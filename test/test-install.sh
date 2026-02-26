@@ -76,11 +76,13 @@ for file in \
     ".syskit/scripts/impl-check.sh" \
     ".syskit/scripts/impl-stamp.sh" \
     ".syskit/scripts/toc-update.sh" \
+    ".syskit/scripts/trace.sh" \
     ".claude/commands/syskit-impact.md" \
     ".claude/commands/syskit-propose.md" \
     ".claude/commands/syskit-plan.md" \
     ".claude/commands/syskit-implement.md" \
     ".claude/commands/syskit-guide.md" \
+    ".claude/commands/syskit-trace.md" \
     "doc/requirements/states_and_modes.md" \
     "doc/requirements/quality_metrics.md" \
     "doc/requirements/req_000_template.md" \
@@ -124,7 +126,8 @@ for script in \
     ".syskit/scripts/trace-sync.sh" \
     ".syskit/scripts/impl-check.sh" \
     ".syskit/scripts/impl-stamp.sh" \
-    ".syskit/scripts/toc-update.sh"
+    ".syskit/scripts/toc-update.sh" \
+    ".syskit/scripts/trace.sh"
 do
     if [ -x "$script" ]; then
         pass "Executable: $script"
@@ -272,6 +275,58 @@ if .syskit/scripts/trace-sync.sh 2>/dev/null | grep -q "MISSING"; then
     fail "trace-sync.sh still reports missing references after fix"
 else
     pass "trace-sync.sh confirms no missing references after fix"
+fi
+
+echo ""
+echo "Testing trace.sh..."
+
+# trace.sh should find REQ-001 and output trace data
+if .syskit/scripts/trace.sh REQ-001 2>/dev/null | grep -q "TRACE_DATA_START"; then
+    pass "trace.sh outputs trace data for REQ-001"
+else
+    fail "trace.sh did not output trace data for REQ-001"
+fi
+
+# trace.sh should include the root node
+if .syskit/scripts/trace.sh REQ-001 2>/dev/null | grep -q "NODE 0 REQ-001"; then
+    pass "trace.sh includes root node"
+else
+    fail "trace.sh missing root node"
+fi
+
+# trace.sh should show the Allocated To section with UNIT-001
+if .syskit/scripts/trace.sh REQ-001 2>/dev/null | grep -q "SECTION Allocated To"; then
+    pass "trace.sh shows Allocated To section"
+else
+    fail "trace.sh missing Allocated To section"
+fi
+
+# trace.sh should include UNIT-001 as a neighbor node
+if .syskit/scripts/trace.sh REQ-001 2>/dev/null | grep -q "NODE 1 UNIT-001"; then
+    pass "trace.sh includes neighbor UNIT-001"
+else
+    fail "trace.sh missing neighbor UNIT-001"
+fi
+
+# trace.sh should handle case-insensitive input
+if .syskit/scripts/trace.sh req-001 2>/dev/null | grep -q "TRACE_DATA_START"; then
+    pass "trace.sh accepts lowercase IDs"
+else
+    fail "trace.sh rejects lowercase IDs"
+fi
+
+# trace.sh should fail gracefully for unknown IDs
+if .syskit/scripts/trace.sh REQ-999 2>/dev/null; then
+    fail "trace.sh did not fail for unknown ID"
+else
+    pass "trace.sh fails gracefully for unknown ID"
+fi
+
+# trace.sh should list available IDs when ID not found
+if .syskit/scripts/trace.sh REQ-999 2>&1 | grep -q "Available IDs"; then
+    pass "trace.sh shows available IDs on not-found"
+else
+    fail "trace.sh did not show available IDs"
 fi
 
 echo ""

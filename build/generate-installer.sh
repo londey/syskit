@@ -39,6 +39,7 @@ mkdir -p doc/requirements
 mkdir -p doc/interfaces
 mkdir -p doc/design
 mkdir -p doc/verification
+mkdir -p doc/reports
 mkdir -p .syskit/scripts
 mkdir -p .syskit/prompts
 mkdir -p .syskit/ref

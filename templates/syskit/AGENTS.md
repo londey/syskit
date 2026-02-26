@@ -12,6 +12,7 @@ All persistent engineering documents live under `doc/`:
 - `doc/interfaces/` — Contracts between components and with external systems
 - `doc/design/` — How the system accomplishes requirements
 - `doc/verification/` — How requirements are verified
+- `doc/reports/` — Technical reports and investigation findings (working documents)
 - `ARCHITECTURE.md` — Auto-generated architecture overview with block diagram (project root)
 
 Working documents live under `.syskit/`:
@@ -45,6 +46,10 @@ For detailed format and style guidance, see `.syskit/ref/document-formats.md`.
 ## Workflows
 
 **Important:** Always invoke syskit scripts using workspace-relative paths (e.g., `.syskit/scripts/manifest.sh`). Never expand these to absolute paths.
+
+### Investigating First (Optional)
+
+If a topic needs investigation before proposing changes, use `/syskit-technical-report` to explore the codebase and document findings. The report can then serve as context when running `/syskit-impact`.
 
 ### Before Making Changes
 

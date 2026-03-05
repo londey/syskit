@@ -18,7 +18,7 @@ Each requirement document defines a single, testable system behavior using the c
 
 > **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
 
-Requirements are traceable: each is allocated to design units (`UNIT-NNN`) and references interfaces (`INT-NNN`). Together they form a complete, verifiable description of system capability.
+Requirements are traceable: each references the interfaces (`INT-NNN`) it depends on, and design units reference the requirements they implement. Together they form a complete, verifiable description of system capability.
 
 ## Conventions
 

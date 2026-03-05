@@ -144,7 +144,7 @@ After spec changes are approved:
 
 1. Delegate implementation to a subagent — subagent reads the task file and all referenced files, makes changes, verifies, returns a summary
 2. After each task, run post-implementation scripts to verify consistency
-3. Run `.syskit/scripts/trace-sync.sh` to verify cross-references are consistent
+3. Run `.syskit/scripts/trace-sync.sh` to validate forward references
 4. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
 5. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
 6. After doc changes, run `.syskit/scripts/arch-update.sh` to refresh ARCHITECTURE.md
@@ -216,7 +216,16 @@ Helper scripts:
 
 Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN`, `VER-NNN` identifiers (or `REQ-NNN.NN`, `INT-NNN.NN`, `UNIT-NNN.NN`, `VER-NNN.NN` for children) when referencing between documents.
 
-For detailed cross-reference rules and the sync tool, see `.syskit/ref/cross-references.md`.
+References are unidirectional — each document only declares forward references, never back-references:
+
+- **INT** → references nothing
+- **REQ** → may reference INT
+- **UNIT** → may reference REQ and INT
+- **VER** → may reference REQ, UNIT, and INT
+
+Use `.syskit/scripts/trace-query.sh <ID>` for reverse lookups (e.g., "what implements REQ-001?").
+
+For detailed rules, see `.syskit/ref/cross-references.md`.
 
 For Spec-ref implementation traceability, see `.syskit/ref/spec-ref.md`.
 
@@ -1489,15 +1498,6 @@ Internal | External Standard | External Service
 - **Standard:** <name and version>
 - **Reference:** <URL or document reference>
 
-## Parties
-
-- **Provider:** UNIT-NNN (<unit name>) | External
-- **Consumer:** UNIT-NNN (<unit name>)
-
-## Referenced By
-
-- REQ-NNN (<requirement name>)
-
 ## Specification
 
 <!-- For internal interfaces, define the specification here -->
@@ -1646,10 +1646,6 @@ When [condition/trigger], the system SHALL [observable behavior/response].
 
 - ${PARENT_DISPLAY}
 
-## Allocated To
-
-- UNIT-NNN (<unit name>)
-
 ## Interfaces
 
 - INT-NNN (<interface name>)
@@ -1657,10 +1653,6 @@ When [condition/trigger], the system SHALL [observable behavior/response].
 ## Verification Method
 
 <How this requirement will be verified>
-
-## Verified By
-
-- VER-NNN (<verification name>)
 
 ## Notes
 
@@ -1812,10 +1804,6 @@ cat > "$FILEPATH" << EOF
 ## Implementation
 
 - \`<filepath>\`: <description>
-
-## Verification
-
-- \`<test filepath>\`: <what it tests>
 
 ## Design Notes
 
@@ -2439,14 +2427,18 @@ echo "TOC updated in doc/*/README.md"
 __SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/toc-update.sh"
 
-# --- .syskit/scripts/trace-sync.sh ---
-info "Creating .syskit/scripts/trace-sync.sh"
-cat > ".syskit/scripts/trace-sync.sh" << '__SYSKIT_TEMPLATE_END__'
+# --- .syskit/scripts/trace-lib.sh ---
+info "Creating .syskit/scripts/trace-lib.sh"
+cat > ".syskit/scripts/trace-lib.sh" << '__SYSKIT_TEMPLATE_END__'
 #!/bin/bash
-# Check and optionally fix bidirectional cross-references between spec documents
-# Usage: trace-sync.sh [--fix]
-# Exit codes: 0 = all consistent, 1 = issues found
-set -e
+# Shared functions for trace-sync.sh and trace-query.sh
+# Sourced, not executed directly.
+
+# Require bash 4+ for associative arrays
+if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    echo "Error: bash 4+ required (found ${BASH_VERSION})" >&2
+    exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -2455,15 +2447,6 @@ REQ_DIR="$PROJECT_ROOT/doc/requirements"
 INT_DIR="$PROJECT_ROOT/doc/interfaces"
 UNIT_DIR="$PROJECT_ROOT/doc/design"
 VER_DIR="$PROJECT_ROOT/doc/verification"
-
-FIX_MODE=false
-[ "${1:-}" = "--fix" ] && FIX_MODE=true
-
-# Require bash 4+ for associative arrays
-if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
-    echo "Error: bash 4+ required (found ${BASH_VERSION})" >&2
-    exit 1
-fi
 
 # ─── ID Map ────────────────────────────────────────────────────────
 
@@ -2479,7 +2462,6 @@ VER_PAT='VER-[0-9]{3}(\.[0-9]{2})?'
 
 build_id_map() {
     local tag dir prefix entry base num id name
-    # Scan all document types (supports hierarchical numbering: XXX-NNN or XXX-NNN.NN)
     for entry in "req:$REQ_DIR:REQ" "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT" "ver:$VER_DIR:VER"; do
         IFS=':' read -r tag dir prefix <<< "$entry"
         [ -d "$dir" ] || continue
@@ -2487,7 +2469,6 @@ build_id_map() {
             [ -f "$f" ] || continue
             base=$(basename "$f")
             [[ "$base" == *_000_template* ]] && continue
-            # Match tag_NNN_name.md or tag_NNN.NN_name.md
             if [[ "$base" =~ ^${tag}_([0-9]{3}(\.[0-9]{2})?)_.+\.md$ ]]; then
                 num="${BASH_REMATCH[1]}"
                 id="${prefix}-${num}"
@@ -2500,6 +2481,21 @@ build_id_map() {
     done
 }
 
+# ─── Section Parser ────────────────────────────────────────────────
+
+section_lines() { # <file> <heading> <level>
+    awk -v section="$2" -v level="$3" '
+        BEGIN { found = 0 }
+        $0 == section { found = 1; next }
+        found && /^#/ { match($0, /^#+/); if (RLENGTH <= level) exit }
+        found { print }
+    ' "$1"
+}
+
+section_ids() { # <file> <heading> <level> <id_pattern>
+    section_lines "$1" "$2" "$3" | grep -oE "$4" | sort -u || true
+}
+
 # ─── Reference Storage ─────────────────────────────────────────────
 # REFS["type:SOURCE_ID"] = "TARGET1 TARGET2 ..."
 
@@ -2510,43 +2506,16 @@ add_ref() { # <type> <source> <target>
     REFS["$key"]="${REFS[$key]:-}${REFS[$key]:+ }$3"
 }
 
-has_ref() { # <type> <source> <target> -> exit code
-    [[ " ${REFS[$1:$2]:-} " == *" $3 "* ]]
-}
+# ─── Parse Forward References ──────────────────────────────────────
 
-# ─── Section Parser ────────────────────────────────────────────────
-
-# Extract text lines within a section (between heading and next same/higher-level heading)
-section_lines() { # <file> <heading> <level>
-    awk -v section="$2" -v level="$3" '
-        BEGIN { found = 0 }
-        $0 == section { found = 1; next }
-        found && /^#/ { match($0, /^#+/); if (RLENGTH <= level) exit }
-        found { print }
-    ' "$1"
-}
-
-# Extract unique IDs matching a pattern from a section
-section_ids() { # <file> <heading> <level> <id_pattern>
-    section_lines "$1" "$2" "$3" | grep -oE "$4" | sort -u || true
-}
-
-# ─── Parse All Documents ──────────────────────────────────────────
-
-parse_all() {
-    local id file x parties
+parse_forward_refs() {
+    local id file x
     for id in "${!ALL_IDS[@]}"; do
         file="${ID_TO_FILE[$id]}"
         case "$id" in
             REQ-*)
-                for x in $(section_ids "$file" "## Allocated To" 2 "$UNIT_PAT"); do
-                    add_ref req_alloc "$id" "$x"
-                done
                 for x in $(section_ids "$file" "## Interfaces" 2 "$INT_PAT"); do
                     add_ref req_iface "$id" "$x"
-                done
-                for x in $(section_ids "$file" "## Verified By" 2 "$VER_PAT"); do
-                    add_ref req_verby "$id" "$x"
                 done
                 ;;
             UNIT-*)
@@ -2569,61 +2538,261 @@ parse_all() {
                 done
                 ;;
             INT-*)
-                parties=$(section_lines "$file" "## Parties" 2)
-                for x in $(echo "$parties" | grep -i 'Provider' | grep -oE "$UNIT_PAT" || true); do
-                    add_ref int_prov "$id" "$x"
-                done
-                for x in $(echo "$parties" | grep -i 'Consumer' | grep -oE "$UNIT_PAT" || true); do
-                    add_ref int_cons "$id" "$x"
-                done
-                for x in $(section_ids "$file" "## Referenced By" 2 "$REQ_PAT"); do
-                    add_ref int_refby "$id" "$x"
-                done
+                # Interfaces reference no other syskit documents
                 ;;
         esac
     done
 }
 
-# ─── Insertion Helper ─────────────────────────────────────────────
+# ─── ID Counts ─────────────────────────────────────────────────────
 
-# Insert a line after the last list item in a section (or after the heading if none)
-insert_in_section() { # <file> <heading> <level> <new_line>
-    local file="$1" heading="$2" level="$3" new_line="$4"
+count_ids() {
+    REQ_N=0 INT_N=0 UNIT_N=0 VER_N=0
+    for id in "${!ALL_IDS[@]}"; do
+        case "$id" in
+            REQ-*)  REQ_N=$((REQ_N + 1)) ;;
+            INT-*)  INT_N=$((INT_N + 1)) ;;
+            UNIT-*) UNIT_N=$((UNIT_N + 1)) ;;
+            VER-*)  VER_N=$((VER_N + 1)) ;;
+        esac
+    done
+}
+__SYSKIT_TEMPLATE_END__
+chmod +x ".syskit/scripts/trace-lib.sh"
 
-    # Find the line number to insert after
-    local insert_after
-    insert_after=$(awk -v section="$heading" -v level="$level" '
-        BEGIN { in_sec = 0; last_item = 0; sec_line = 0 }
-        $0 == section { in_sec = 1; sec_line = NR; next }
-        in_sec && /^#/ { match($0, /^#+/); if (RLENGTH <= level) in_sec = 0 }
-        in_sec && /^- / { last_item = NR }
-        END {
-            if (last_item > 0) print last_item
-            else if (sec_line > 0) print sec_line
-            else print 0
-        }
-    ' "$file")
+# --- .syskit/scripts/trace-query.sh ---
+info "Creating .syskit/scripts/trace-query.sh"
+cat > ".syskit/scripts/trace-query.sh" << '__SYSKIT_TEMPLATE_END__'
+#!/bin/bash
+# Query cross-references: reverse lookups and coverage reports
+# Usage: trace-query.sh <ID>             — show what references this ID
+#        trace-query.sh --coverage       — full traceability matrix
+#        trace-query.sh --unimplemented  — REQs with no UNIT implementing them
+#        trace-query.sh --unverified     — REQs with no VER verifying them
+set -e
 
-    if [ "$insert_after" -eq 0 ]; then
-        return 1
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/trace-lib.sh"
+
+# ─── Reverse Lookup ──────────────────────────────────────────────
+
+query_id() {
+    local target="$1"
+    if [ -z "${ALL_IDS[$target]:-}" ]; then
+        echo "Error: $target not found" >&2
+        exit 1
     fi
 
-    # Insert using awk (cross-platform, avoids sed -i differences)
-    local temp
-    temp=$(mktemp)
-    awk -v after="$insert_after" -v newline="$new_line" '
-        { print }
-        NR == after { print newline }
-    ' "$file" > "$temp"
-    mv "$temp" "$file"
+    echo "# $target: ${ID_TO_NAME[$target]:-}"
+    echo ""
+
+    local key source found=false
+    case "$target" in
+        INT-*)
+            echo "## Referenced by Requirements"
+            for key in "${!REFS[@]}"; do
+                [[ "$key" == req_iface:* ]] || continue
+                source="${key#*:}"
+                for t in ${REFS[$key]}; do
+                    [ "$t" = "$target" ] && echo "- $source (${ID_TO_NAME[$source]:-})" && found=true
+                done
+            done
+            $found || echo "- (none)"
+
+            echo ""
+            echo "## Provided by"
+            found=false
+            for key in "${!REFS[@]}"; do
+                [[ "$key" == unit_prov:* ]] || continue
+                source="${key#*:}"
+                for t in ${REFS[$key]}; do
+                    [ "$t" = "$target" ] && echo "- $source (${ID_TO_NAME[$source]:-})" && found=true
+                done
+            done
+            $found || echo "- (none)"
+
+            echo ""
+            echo "## Consumed by"
+            found=false
+            for key in "${!REFS[@]}"; do
+                [[ "$key" == unit_cons:* ]] || continue
+                source="${key#*:}"
+                for t in ${REFS[$key]}; do
+                    [ "$t" = "$target" ] && echo "- $source (${ID_TO_NAME[$source]:-})" && found=true
+                done
+            done
+            $found || echo "- (none)"
+            ;;
+
+        REQ-*)
+            echo "## Implemented by"
+            for key in "${!REFS[@]}"; do
+                [[ "$key" == unit_impl:* ]] || continue
+                source="${key#*:}"
+                for t in ${REFS[$key]}; do
+                    [ "$t" = "$target" ] && echo "- $source (${ID_TO_NAME[$source]:-})" && found=true
+                done
+            done
+            $found || echo "- (none)"
+
+            echo ""
+            echo "## Verified by"
+            found=false
+            for key in "${!REFS[@]}"; do
+                [[ "$key" == ver_req:* ]] || continue
+                source="${key#*:}"
+                for t in ${REFS[$key]}; do
+                    [ "$t" = "$target" ] && echo "- $source (${ID_TO_NAME[$source]:-})" && found=true
+                done
+            done
+            $found || echo "- (none)"
+            ;;
+
+        UNIT-*)
+            echo "## Verified by"
+            for key in "${!REFS[@]}"; do
+                [[ "$key" == ver_unit:* ]] || continue
+                source="${key#*:}"
+                for t in ${REFS[$key]}; do
+                    [ "$t" = "$target" ] && echo "- $source (${ID_TO_NAME[$source]:-})" && found=true
+                done
+            done
+            $found || echo "- (none)"
+            ;;
+
+        VER-*)
+            echo "(VER documents are at the top of the reference hierarchy — nothing references them)"
+            ;;
+    esac
 }
 
-# ─── Check & Fix ──────────────────────────────────────────────────
+# ─── Coverage Report ─────────────────────────────────────────────
 
-MISSING=0
+report_coverage() {
+    echo "# Traceability Matrix"
+    echo ""
+
+    local req_id key source
+    for req_id in $(echo "${!ALL_IDS[@]}" | tr ' ' '\n' | grep '^REQ-' | sort); do
+        echo "## $req_id: ${ID_TO_NAME[$req_id]:-}"
+
+        echo "  Interfaces:"
+        local found=false
+        for t in ${REFS[req_iface:$req_id]:-}; do
+            echo "    - $t (${ID_TO_NAME[$t]:-})"
+            found=true
+        done
+        $found || echo "    - (none)"
+
+        echo "  Implemented by:"
+        found=false
+        for key in "${!REFS[@]}"; do
+            [[ "$key" == unit_impl:* ]] || continue
+            source="${key#*:}"
+            for t in ${REFS[$key]}; do
+                [ "$t" = "$req_id" ] && echo "    - $source (${ID_TO_NAME[$source]:-})" && found=true
+            done
+        done
+        $found || echo "    - (none)"
+
+        echo "  Verified by:"
+        found=false
+        for key in "${!REFS[@]}"; do
+            [[ "$key" == ver_req:* ]] || continue
+            source="${key#*:}"
+            for t in ${REFS[$key]}; do
+                [ "$t" = "$req_id" ] && echo "    - $source (${ID_TO_NAME[$source]:-})" && found=true
+            done
+        done
+        $found || echo "    - (none)"
+
+        echo ""
+    done
+}
+
+# ─── Gap Reports ─────────────────────────────────────────────────
+
+report_unimplemented() {
+    echo "# Unimplemented Requirements"
+    echo ""
+    local count=0
+    for req_id in $(echo "${!ALL_IDS[@]}" | tr ' ' '\n' | grep '^REQ-' | sort); do
+        local found=false
+        for key in "${!REFS[@]}"; do
+            [[ "$key" == unit_impl:* ]] || continue
+            for t in ${REFS[$key]}; do
+                [ "$t" = "$req_id" ] && found=true && break 2
+            done
+        done
+        if ! $found; then
+            echo "- $req_id (${ID_TO_NAME[$req_id]:-})"
+            count=$((count + 1))
+        fi
+    done
+    echo ""
+    echo "$count unimplemented requirement(s)"
+}
+
+report_unverified() {
+    echo "# Unverified Requirements"
+    echo ""
+    local count=0
+    for req_id in $(echo "${!ALL_IDS[@]}" | tr ' ' '\n' | grep '^REQ-' | sort); do
+        local found=false
+        for key in "${!REFS[@]}"; do
+            [[ "$key" == ver_req:* ]] || continue
+            for t in ${REFS[$key]}; do
+                [ "$t" = "$req_id" ] && found=true && break 2
+            done
+        done
+        if ! $found; then
+            echo "- $req_id (${ID_TO_NAME[$req_id]:-})"
+            count=$((count + 1))
+        fi
+    done
+    echo ""
+    echo "$count unverified requirement(s)"
+}
+
+# ─── Main ─────────────────────────────────────────────────────────
+
+if [ $# -eq 0 ]; then
+    echo "Usage: trace-query.sh <ID>             — reverse lookup"
+    echo "       trace-query.sh --coverage       — full traceability matrix"
+    echo "       trace-query.sh --unimplemented  — REQs with no UNIT"
+    echo "       trace-query.sh --unverified     — REQs with no VER"
+    exit 1
+fi
+
+build_id_map
+parse_forward_refs
+
+case "$1" in
+    --coverage)      report_coverage ;;
+    --unimplemented) report_unimplemented ;;
+    --unverified)    report_unverified ;;
+    *)               query_id "$1" ;;
+esac
+__SYSKIT_TEMPLATE_END__
+chmod +x ".syskit/scripts/trace-query.sh"
+
+# --- .syskit/scripts/trace-sync.sh ---
+info "Creating .syskit/scripts/trace-sync.sh"
+cat > ".syskit/scripts/trace-sync.sh" << '__SYSKIT_TEMPLATE_END__'
+#!/bin/bash
+# Validate forward cross-references between spec documents
+# Usage: trace-sync.sh
+# Exit codes: 0 = all consistent, 1 = issues found
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/trace-lib.sh"
+
+# ─── Check & Report ──────────────────────────────────────────────
+
 BROKEN=0
+DIRECTION=0
 ORPHANS=0
-FIXED=0
 
 check_broken() {
     local key source target seen=""
@@ -2631,7 +2800,6 @@ check_broken() {
         source="${key#*:}"
         for target in ${REFS[$key]}; do
             if [ -z "${ALL_IDS[$target]:-}" ]; then
-                # Deduplicate: same source->target may appear via different ref types
                 local pair="$source->$target"
                 [[ "$seen" == *"$pair"* ]] && continue
                 seen="$seen $pair"
@@ -2642,98 +2810,49 @@ check_broken() {
     done
 }
 
-# Check one direction of a bidirectional relationship.
-# For each ref fwd:A->B, verify back:B->A exists.
-check_pair() { # <fwd_type> <back_type> <fwd_label> <back_label> <back_heading> <back_level> <format>
-    local fwd="$1" back="$2" fwd_label="$3" back_label="$4"
-    local back_heading="$5" back_level="$6" fmt="$7"
-    local key src tgt tgt_base src_name line
-
+check_direction() {
+    local key source target
     for key in "${!REFS[@]}"; do
-        [[ "$key" == "${fwd}:"* ]] || continue
-        src="${key#*:}"
-        for tgt in ${REFS[$key]}; do
-            # Skip broken references (reported separately)
-            [ -z "${ALL_IDS[$tgt]:-}" ] && continue
-            # Skip if back-reference already exists
-            has_ref "$back" "$tgt" "$src" && continue
-
-            tgt_base=$(basename "${ID_TO_FILE[$tgt]}")
-            src_name="${ID_TO_NAME[$src]:-}"
-
-            if $FIX_MODE; then
-                case "$fmt" in
-                    list)     line="- ${src} (${src_name})" ;;
-                    provider) line="- **Provider:** ${src} (${src_name})" ;;
-                    consumer) line="- **Consumer:** ${src} (${src_name})" ;;
-                esac
-                if insert_in_section "${ID_TO_FILE[$tgt]}" "$back_heading" "$back_level" "$line"; then
-                    echo "FIXED    ${tgt_base}: added ${src} to \"${back_label}\""
-                    FIXED=$((FIXED + 1))
-                    add_ref "$back" "$tgt" "$src"
-                else
-                    echo "SKIPPED  ${tgt_base}: \"${back_label}\" section not found"
-                    MISSING=$((MISSING + 1))
-                fi
-            else
-                echo "MISSING  ${tgt_base} \"${back_label}\" lacks ${src}"
-                echo "  reason: ${src} \"${fwd_label}\" references ${tgt}"
-                MISSING=$((MISSING + 1))
-            fi
+        source="${key#*:}"
+        for target in ${REFS[$key]}; do
+            [ -z "${ALL_IDS[$target]:-}" ] && continue
+            case "$source" in
+                REQ-*)
+                    case "$target" in
+                        INT-*) ;;
+                        *) echo "DIRECTION  $source references $target — requirements may only reference interfaces"
+                           DIRECTION=$((DIRECTION + 1)) ;;
+                    esac
+                    ;;
+                UNIT-*)
+                    case "$target" in
+                        REQ-*|INT-*) ;;
+                        *) echo "DIRECTION  $source references $target — design units may only reference requirements and interfaces"
+                           DIRECTION=$((DIRECTION + 1)) ;;
+                    esac
+                    ;;
+                VER-*)
+                    case "$target" in
+                        REQ-*|UNIT-*|INT-*) ;;
+                        *) echo "DIRECTION  $source references $target — verifications may only reference requirements, units, and interfaces"
+                           DIRECTION=$((DIRECTION + 1)) ;;
+                    esac
+                    ;;
+                INT-*)
+                    echo "DIRECTION  $source references $target — interfaces must not reference other documents"
+                    DIRECTION=$((DIRECTION + 1))
+                    ;;
+            esac
         done
     done
-}
-
-check_consistency() {
-    # REQ.AllocatedTo <-> UNIT.ImplementsReq
-    check_pair req_alloc unit_impl \
-        "Allocated To" "Implements Requirements" \
-        "## Implements Requirements" 2 list
-    check_pair unit_impl req_alloc \
-        "Implements Requirements" "Allocated To" \
-        "## Allocated To" 2 list
-
-    # REQ.Interfaces <-> INT.ReferencedBy
-    check_pair req_iface int_refby \
-        "Interfaces" "Referenced By" \
-        "## Referenced By" 2 list
-    check_pair int_refby req_iface \
-        "Referenced By" "Interfaces" \
-        "## Interfaces" 2 list
-
-    # UNIT.Provides <-> INT.Provider
-    check_pair unit_prov int_prov \
-        "Provides" "Parties (Provider)" \
-        "## Parties" 2 provider
-    check_pair int_prov unit_prov \
-        "Parties (Provider)" "Provides" \
-        "### Provides" 3 list
-
-    # UNIT.Consumes <-> INT.Consumer
-    check_pair unit_cons int_cons \
-        "Consumes" "Parties (Consumer)" \
-        "## Parties" 2 consumer
-    check_pair int_cons unit_cons \
-        "Parties (Consumer)" "Consumes" \
-        "### Consumes" 3 list
-
-    # VER.VerifiesRequirements <-> REQ.VerifiedBy
-    check_pair ver_req req_verby \
-        "Verifies Requirements" "Verified By" \
-        "## Verified By" 2 list
-    check_pair req_verby ver_req \
-        "Verified By" "Verifies Requirements" \
-        "## Verifies Requirements" 2 list
-
-    # VER.VerifiedDesignUnits <-> UNIT.Verification
-    check_pair ver_unit unit_ver \
-        "Verified Design Units" "Verification" \
-        "## Verification" 2 list
 }
 
 check_orphans() {
     local id found key target
     for id in "${!ALL_IDS[@]}"; do
+        # VER documents are at the top of the hierarchy — they cannot be orphans
+        [[ "$id" == VER-* ]] && continue
+
         found=false
         for key in "${!REFS[@]}"; do
             for target in ${REFS[$key]}; do
@@ -2753,18 +2872,9 @@ check_orphans() {
 # ─── Main ─────────────────────────────────────────────────────────
 
 build_id_map
+count_ids
 
-REQ_N=0 INT_N=0 UNIT_N=0 VER_N=0
-for id in "${!ALL_IDS[@]}"; do
-    case "$id" in
-        REQ-*)  REQ_N=$((REQ_N + 1)) ;;
-        INT-*)  INT_N=$((INT_N + 1)) ;;
-        UNIT-*) UNIT_N=$((UNIT_N + 1)) ;;
-        VER-*)  VER_N=$((VER_N + 1)) ;;
-    esac
-done
-
-echo "# Traceability Sync$($FIX_MODE && echo ' (--fix)')"
+echo "# Traceability Check"
 echo ""
 echo "Scanned: ${REQ_N} requirements, ${INT_N} interfaces, ${UNIT_N} design units, ${VER_N} verifications"
 echo ""
@@ -2774,19 +2884,15 @@ if [ $((REQ_N + INT_N + UNIT_N + VER_N)) -eq 0 ]; then
     exit 0
 fi
 
-parse_all
+parse_forward_refs
 check_broken
-check_consistency
+check_direction
 check_orphans
 
 echo ""
-TOTAL=$((MISSING + BROKEN + ORPHANS))
+TOTAL=$((BROKEN + DIRECTION + ORPHANS))
 
-if $FIX_MODE; then
-    echo "Summary: ${FIXED} fixed, ${TOTAL} remaining issues"
-else
-    echo "Summary: ${MISSING} missing, ${BROKEN} broken, ${ORPHANS} orphans"
-fi
+echo "Summary: ${BROKEN} broken, ${DIRECTION} direction violations, ${ORPHANS} orphans"
 
 if [ "$TOTAL" -eq 0 ]; then
     echo "All cross-references are consistent."
@@ -2808,12 +2914,9 @@ cat > ".syskit/scripts/trace.sh" << '__SYSKIT_TEMPLATE_END__'
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/trace-lib.sh"
 
-REQ_DIR="$PROJECT_ROOT/doc/requirements"
-INT_DIR="$PROJECT_ROOT/doc/interfaces"
-UNIT_DIR="$PROJECT_ROOT/doc/design"
-VER_DIR="$PROJECT_ROOT/doc/verification"
+ANY_ID_PAT='(REQ|INT|UNIT|VER)-[0-9]{3}(\.[0-9]{2})?'
 
 if [ -z "${1:-}" ]; then
     echo "Usage: trace.sh <ID>" >&2
@@ -2823,64 +2926,12 @@ fi
 
 INPUT_ID="$1"
 
-# Require bash 4+ for associative arrays
-if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
-    echo "Error: bash 4+ required (found ${BASH_VERSION})" >&2
-    exit 1
-fi
-
-# ─── ID Map ────────────────────────────────────────────────────────
-
-declare -A ID_TO_FILE    # ID -> full file path
-declare -A ID_TO_NAME    # ID -> human-readable name from H1
-
-REQ_PAT='REQ-[0-9]{3}(\.[0-9]{2})?'
-INT_PAT='INT-[0-9]{3}(\.[0-9]{2})?'
-UNIT_PAT='UNIT-[0-9]{3}(\.[0-9]{2})?'
-VER_PAT='VER-[0-9]{3}(\.[0-9]{2})?'
-ANY_ID_PAT='(REQ|INT|UNIT|VER)-[0-9]{3}(\.[0-9]{2})?'
-
-build_id_map() {
-    local tag dir prefix entry base num id name
-    for entry in "req:$REQ_DIR:REQ" "int:$INT_DIR:INT" "unit:$UNIT_DIR:UNIT" "ver:$VER_DIR:VER"; do
-        IFS=':' read -r tag dir prefix <<< "$entry"
-        [ -d "$dir" ] || continue
-        for f in "$dir"/${tag}_*.md; do
-            [ -f "$f" ] || continue
-            base=$(basename "$f")
-            [[ "$base" == *_000_template* ]] && continue
-            if [[ "$base" =~ ^${tag}_([0-9]{3}(\.[0-9]{2})?)_.+\.md$ ]]; then
-                num="${BASH_REMATCH[1]}"
-                id="${prefix}-${num}"
-                ID_TO_FILE["$id"]="$f"
-                name=$(head -1 "$f" | sed "s/^# *${prefix}-${num}: *//")
-                ID_TO_NAME["$id"]="$name"
-            fi
-        done
-    done
-}
-
-# ─── Section Parser ────────────────────────────────────────────────
-
-section_lines() { # <file> <heading> <level>
-    awk -v section="$2" -v level="$3" '
-        BEGIN { found = 0 }
-        $0 == section { found = 1; next }
-        found && /^#/ { match($0, /^#+/); if (RLENGTH <= level) exit }
-        found { print }
-    ' "$1"
-}
-
-section_ids() { # <file> <heading> <level> <id_pattern>
-    section_lines "$1" "$2" "$3" | grep -oE "$4" | sort -u || true
-}
+# ─── Summary Extraction ───────────────────────────────────────────
 
 # Extract first meaningful line from a section (for summaries)
 section_first_line() { # <file> <heading> <level>
     section_lines "$1" "$2" "$3" | grep -v '^\s*$' | grep -v '^- ' | grep -v '^|' | head -1 | sed 's/^[[:space:]]*//'
 }
-
-# ─── Summary Extraction ───────────────────────────────────────────
 
 extract_summary() { # <id> <file>
     local id="$1" file="$2" summary=""
@@ -2900,12 +2951,10 @@ extract_summary() { # <id> <file>
         VER-*)
             summary=$(section_first_line "$file" "## Preconditions" 2)
             if [ -z "$summary" ]; then
-                # Try procedure
                 summary=$(section_first_line "$file" "## Procedure" 2)
             fi
             ;;
     esac
-    # Trim to reasonable length
     if [ ${#summary} -gt 120 ]; then
         summary="${summary:0:117}..."
     fi
@@ -2919,7 +2968,6 @@ find_impl_files() { # <unit_basename>
     local unit_file="$UNIT_DIR/$unit_basename"
     [ -f "$unit_file" ] || return
 
-    # Get files listed in ## Implementation section
     awk '
         BEGIN { found = 0 }
         $0 == "## Implementation" { found = 1; next }
@@ -2932,9 +2980,23 @@ find_impl_files() { # <unit_basename>
     ' "$unit_file"
 }
 
+# ─── Reverse Lookup Helpers ──────────────────────────────────────
+
+# Find all source IDs that reference a target via a specific ref type
+reverse_lookup() { # <ref_type> <target_id>
+    local ref_type="$1" target_id="$2"
+    local key source
+    for key in "${!REFS[@]}"; do
+        [[ "$key" == "${ref_type}:"* ]] || continue
+        source="${key#*:}"
+        for t in ${REFS[$key]}; do
+            [ "$t" = "$target_id" ] && echo "$source"
+        done
+    done | sort -u
+}
+
 # ─── Trace Collection ─────────────────────────────────────────────
 
-# Emit a NODE block
 emit_node() { # <id> <depth>
     local id="$1" depth="$2"
     local file="${ID_TO_FILE[$id]:-}"
@@ -2952,7 +3014,6 @@ emit_node() { # <id> <depth>
     [ -n "$summary" ] && echo "  SUMMARY ${summary}"
 }
 
-# Emit a SECTION with targets
 emit_section() { # <section_name> <id_list...>
     local section_name="$1"
     shift
@@ -2973,7 +3034,6 @@ emit_section() { # <section_name> <id_list...>
     done
 }
 
-# Emit implementation file references for a UNIT
 emit_impl() { # <id>
     local id="$1"
     local file="${ID_TO_FILE[$id]:-}"
@@ -2995,7 +3055,6 @@ emit_impl() { # <id>
     done <<< "$impl_files"
 }
 
-# Collect trace data for one node
 trace_node() { # <id> <depth>
     local id="$1" depth="$2"
     local file="${ID_TO_FILE[$id]:-}"
@@ -3008,66 +3067,64 @@ trace_node() { # <id> <depth>
 
     case "$id" in
         REQ-*)
-            # Parent requirements
+            # Forward: Parent Requirements
             mapfile -t ids_arr < <(section_ids "$file" "## Parent Requirements" 2 "$REQ_PAT")
             emit_section "Parent Requirements" "${ids_arr[@]}"
 
-            # Allocated To (design units)
-            mapfile -t ids_arr < <(section_ids "$file" "## Allocated To" 2 "$UNIT_PAT")
-            emit_section "Allocated To" "${ids_arr[@]}"
-
-            # Interfaces
+            # Forward: Interfaces
             mapfile -t ids_arr < <(section_ids "$file" "## Interfaces" 2 "$INT_PAT")
             emit_section "Interfaces" "${ids_arr[@]}"
 
-            # Verified By
-            mapfile -t ids_arr < <(section_ids "$file" "## Verified By" 2 "$VER_PAT")
+            # Reverse: Implemented by (UNITs that reference this REQ)
+            mapfile -t ids_arr < <(reverse_lookup unit_impl "$id")
+            emit_section "Implemented By" "${ids_arr[@]}"
+
+            # Reverse: Verified by (VERs that reference this REQ)
+            mapfile -t ids_arr < <(reverse_lookup ver_req "$id")
             emit_section "Verified By" "${ids_arr[@]}"
             ;;
 
         UNIT-*)
-            # Implements Requirements
+            # Forward: Implements Requirements
             mapfile -t ids_arr < <(section_ids "$file" "## Implements Requirements" 2 "$REQ_PAT")
             emit_section "Implements Requirements" "${ids_arr[@]}"
 
-            # Provides interfaces
+            # Forward: Provides interfaces
             mapfile -t ids_arr < <(section_ids "$file" "### Provides" 3 "$INT_PAT")
             emit_section "Provides" "${ids_arr[@]}"
 
-            # Consumes interfaces
+            # Forward: Consumes interfaces
             mapfile -t ids_arr < <(section_ids "$file" "### Consumes" 3 "$INT_PAT")
             emit_section "Consumes" "${ids_arr[@]}"
 
-            # Verification
-            mapfile -t ids_arr < <(section_ids "$file" "## Verification" 2 "$VER_PAT")
-            emit_section "Verification" "${ids_arr[@]}"
+            # Reverse: Verified by (VERs that reference this UNIT)
+            mapfile -t ids_arr < <(reverse_lookup ver_unit "$id")
+            emit_section "Verified By" "${ids_arr[@]}"
 
             # Implementation files
             emit_impl "$id"
             ;;
 
         INT-*)
-            # Provider
-            local parties
-            parties=$(section_lines "$file" "## Parties" 2)
-            mapfile -t ids_arr < <(echo "$parties" | grep -i 'Provider' | grep -oE "$UNIT_PAT" || true)
+            # Reverse: Referenced by (REQs that reference this INT)
+            mapfile -t ids_arr < <(reverse_lookup req_iface "$id")
+            emit_section "Referenced By" "${ids_arr[@]}"
+
+            # Reverse: Provider (UNITs that provide this INT)
+            mapfile -t ids_arr < <(reverse_lookup unit_prov "$id")
             emit_section "Provider" "${ids_arr[@]}"
 
-            # Consumer
-            mapfile -t ids_arr < <(echo "$parties" | grep -i 'Consumer' | grep -oE "$UNIT_PAT" || true)
+            # Reverse: Consumer (UNITs that consume this INT)
+            mapfile -t ids_arr < <(reverse_lookup unit_cons "$id")
             emit_section "Consumer" "${ids_arr[@]}"
-
-            # Referenced By
-            mapfile -t ids_arr < <(section_ids "$file" "## Referenced By" 2 "$REQ_PAT")
-            emit_section "Referenced By" "${ids_arr[@]}"
             ;;
 
         VER-*)
-            # Verifies Requirements
+            # Forward: Verifies Requirements
             mapfile -t ids_arr < <(section_ids "$file" "## Verifies Requirements" 2 "$REQ_PAT")
             emit_section "Verifies Requirements" "${ids_arr[@]}"
 
-            # Verified Design Units
+            # Forward: Verified Design Units
             mapfile -t ids_arr < <(section_ids "$file" "## Verified Design Units" 2 "$UNIT_PAT")
             emit_section "Verified Design Units" "${ids_arr[@]}"
             ;;
@@ -3091,16 +3148,29 @@ if [ -z "${ID_TO_FILE[$RESOLVED_ID]:-}" ]; then
     exit 2
 fi
 
-# Collect all IDs referenced by the root node (depth 1 neighbors)
-ROOT_FILE="${ID_TO_FILE[$RESOLVED_ID]}"
-NEIGHBOR_IDS=()
+# Parse all forward references (needed for reverse lookups)
+parse_forward_refs
 
-# Gather all referenced IDs from the root file
+# Collect all IDs that relate to the root node (forward + reverse)
+ROOT_FILE="${ID_TO_FILE[$RESOLVED_ID]}"
+declare -A NEIGHBOR_SET
+
+# Forward references from root file
 while IFS= read -r ref_id; do
     [ -z "$ref_id" ] && continue
     [ "$ref_id" = "$RESOLVED_ID" ] && continue
-    NEIGHBOR_IDS+=("$ref_id")
+    NEIGHBOR_SET["$ref_id"]=1
 done < <(grep -oE "$ANY_ID_PAT" "$ROOT_FILE" | sort -u)
+
+# Reverse references to root (scan all forward refs for this target)
+for key in "${!REFS[@]}"; do
+    local_source="${key#*:}"
+    for t in ${REFS[$key]}; do
+        if [ "$t" = "$RESOLVED_ID" ] && [ "$local_source" != "$RESOLVED_ID" ]; then
+            NEIGHBOR_SET["$local_source"]=1
+        fi
+    done
+done
 
 echo "TRACE_DATA_START"
 echo ""
@@ -3114,7 +3184,7 @@ echo ""
 declare -A SEEN
 SEEN["$RESOLVED_ID"]=1
 
-for nid in "${NEIGHBOR_IDS[@]}"; do
+for nid in $(echo "${!NEIGHBOR_SET[@]}" | tr ' ' '\n' | sort); do
     [ -n "${SEEN[$nid]:-}" ] && continue
     [ -z "${ID_TO_FILE[$nid]:-}" ] && continue
     SEEN["$nid"]=1
@@ -3753,29 +3823,42 @@ All document types support two-level hierarchy using dot-notation. Child documen
 
 Top-level IDs use 3-digit padding (`NNN`). Children use 2-digit padding (`.NN`). Hierarchy is limited to two levels.
 
-## Bidirectional Links
+## Reference Direction Rules
 
-The following links must be maintained bidirectionally:
+References flow in one direction only — from more concrete documents toward more abstract ones:
 
-- REQ "Allocated To" ↔ UNIT "Implements Requirements"
-- REQ "Interfaces" ↔ INT "Referenced By"
-- UNIT "Provides" ↔ INT "Parties Provider"
-- UNIT "Consumes" ↔ INT "Parties Consumer"
-- VER "Verifies Requirements" ↔ REQ "Verified By"
-- VER "Verified Design Units" ↔ UNIT "Verification"
+- **INT** — References no other syskit documents
+- **REQ** — May reference INT only (via `## Interfaces`)
+- **UNIT** — May reference REQ and INT (via `## Implements Requirements`, `### Provides`, `### Consumes`)
+- **VER** — May reference REQ, UNIT, and INT (via `## Verifies Requirements`, `## Verified Design Units`)
 
-## Cross-Reference Sync
+This means each document only declares its own forward references. There are no back-reference sections to maintain, so changes to one document do not cascade into others.
 
-After modifying cross-references, run the sync tool:
+## Cross-Reference Validation
+
+Run the validation tool to check for issues:
 
 ```bash
-.syskit/scripts/trace-sync.sh          # check mode — report issues
-.syskit/scripts/trace-sync.sh --fix    # fix mode — add missing back-references
+.syskit/scripts/trace-sync.sh
 ```
 
-This tool verifies bidirectional links and reports broken references (IDs with no matching file) and orphan documents.
+This reports:
+- **Broken references** — IDs that point to nonexistent documents
+- **Direction violations** — References that violate the hierarchy (e.g., a REQ referencing a UNIT)
+- **Orphans** — Documents not referenced by anything (excluding VER, which sits at the top)
 
-**Important:** Do not write custom scripts for traceability updates. Use `trace-sync.sh`.
+## Reverse Lookups
+
+To find what references a given document, use the query tool:
+
+```bash
+.syskit/scripts/trace-query.sh REQ-001        # What implements/verifies this?
+.syskit/scripts/trace-query.sh INT-003        # Who provides/consumes/references this?
+.syskit/scripts/trace-query.sh UNIT-005       # What verifies this unit?
+.syskit/scripts/trace-query.sh --coverage     # Full traceability matrix
+.syskit/scripts/trace-query.sh --unimplemented # REQs with no UNIT implementing them
+.syskit/scripts/trace-query.sh --unverified    # REQs with no VER verifying them
+```
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/ref/document-formats.md ---
@@ -4082,10 +4165,12 @@ Explain the naming convention:
 
 Explain that all document types support two-level hierarchy — child documents use dot-notation (e.g., `REQ-001.03`, `INT-002.01`, `UNIT-003.01`) so the parent relationship is visible from the ID itself.
 
-Explain that these documents cross-reference each other to create a traceability web:
-- Requirements reference the interfaces they use, the design units that implement them, and the verifications that prove them
+Explain that these documents reference each other in one direction to create a traceability chain:
+- Requirements reference the interfaces they depend on
 - Design units reference the requirements they satisfy and the interfaces they provide or consume
 - Verification documents reference the requirements they verify and the design units they exercise
+
+References only flow upward (VER → UNIT/REQ → INT). There are no back-reference sections — use `.syskit/scripts/trace-query.sh <ID>` to find what references a given document.
 
 ### Step 3A: Create a Requirement
 
@@ -4106,7 +4191,7 @@ Once they respond, create the requirement:
      5. **Necessary** — Is this requirement essential, or is it an implementation detail that belongs in a design unit?
      If the statement fails any check, explain the issue to the user and help them revise it before proceeding.
    - **Rationale:** Ask why this requirement exists
-4. Leave **Allocated To** and **Interfaces** as TBD — these will be filled in after creating those documents
+4. Leave **Interfaces** as TBD — this will be filled in after creating the interface document
 
 Write the completed content to the file.
 
@@ -4120,8 +4205,6 @@ Once they respond:
 2. Read the created file
 3. Walk the user through:
    - **Type:** Internal, External Standard, or External Service
-   - **Parties:** Leave Provider/Consumer as TBD until the design unit exists
-   - **Referenced By:** Add the requirement just created (e.g., REQ-001)
    - **Specification:** Help them write at least an overview of what this interface does
    - Help the user understand that detailed data layouts, field definitions, register maps, and encoding specifications belong here in the interface document — not in requirements. If the user described low-level details during requirement creation that were redirected here, incorporate them into the interface specification.
 
@@ -4145,16 +4228,12 @@ Write the completed content to the file.
 
 ### Step 6A: Wire Up Cross-References
 
-Now go back and complete the cross-references:
+Now go back and complete the forward references:
 
 1. Edit the requirement file:
-   - Set **Allocated To** → the design unit just created (e.g., UNIT-001)
    - Set **Interfaces** → the interface just created (e.g., INT-001)
 
-2. Edit the interface file:
-   - Set **Provider/Consumer** in Parties → the design unit (e.g., UNIT-001)
-
-Explain to the user how this traceability web works: every requirement traces forward to what implements it, and every design unit traces back to why it exists.
+Explain that references flow in one direction: the design unit already references the requirement it implements and the interface it provides/consumes. The requirement references the interface it depends on. No document needs to be edited to add back-references — use `.syskit/scripts/trace-query.sh` to look up what references a given document.
 
 ### Step 7A: Update Manifest and Explain Workflow
 
@@ -4195,10 +4274,11 @@ Provide a brief inventory of existing documents:
 Explain the conventions this project uses:
 
 1. **Naming:** `req_NNN_name.md` → `REQ-NNN`, `int_NNN_name.md` → `INT-NNN`, `unit_NNN_name.md` → `UNIT-NNN`, `ver_NNN_name.md` → `VER-NNN` (children use dot-notation: `req_NNN.NN_name.md` → `REQ-NNN.NN`, `int_NNN.NN_name.md` → `INT-NNN.NN`, `unit_NNN.NN_name.md` → `UNIT-NNN.NN`, `ver_NNN.NN_name.md` → `VER-NNN.NN`)
-2. **Cross-references:** Documents link to each other using these IDs to create traceability:
-   - Requirements → Interfaces they use, Design Units that implement them, Verifications that prove them
+2. **Cross-references:** Documents link to each other using these IDs. References flow in one direction (upward):
+   - Requirements → Interfaces they depend on
    - Design Units → Requirements they satisfy, Interfaces they provide/consume
    - Verifications → Requirements they verify, Design Units they exercise
+   - Use `.syskit/scripts/trace-query.sh <ID>` for reverse lookups
 3. **Manifest:** `.syskit/manifest.md` stores SHA256 hashes for freshness checking between workflow steps
 
 ### Step 4B: Explain the Change Workflow
@@ -4418,7 +4498,7 @@ Run these scripts to verify consistency:
 .syskit/scripts/trace-sync.sh
 ```
 
-If trace-sync reports issues, run `.syskit/scripts/trace-sync.sh --fix` and report what was fixed.
+If trace-sync reports issues, report them to the user for manual correction.
 
 For each design unit referenced by the task, update Spec-ref hashes:
 
@@ -5081,12 +5161,12 @@ For **UNIT-** nodes that have implementation files, add an "Implementation Files
 After the tree, provide a brief coverage assessment:
 
 1. **Trace completeness** — Flag any sections that are empty or contain only placeholders (TBD, None, etc.). For example:
-   - A requirement with no "Allocated To" unit → "Not yet allocated to a design unit"
+   - A requirement with no "Implemented By" unit → "Not yet implemented by a design unit"
    - A requirement with no "Verified By" → "No verification defined"
    - A design unit with no "Implements Requirements" → "No requirements traced"
-   - An interface with no provider or consumer → "Missing party assignments"
+   - An interface with no provider or consumer → "No units provide or consume this interface"
 
-2. **Orphan check** — If the root item is not referenced by ANY other document (based on the depth-1 neighbors' back-links), flag it as potentially orphaned.
+2. **Orphan check** — If the root item is not referenced by ANY other document (based on reverse lookups from forward references), flag it as potentially orphaned.
 
 Keep the assessment brief — just list the gaps, don't elaborate.
 
@@ -5178,10 +5258,6 @@ Format: **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
 - Or "None" if this is a top-level requirement
 - Child requirements use hierarchical IDs: REQ-NNN.NN (e.g., REQ-004.01 is a child of REQ-004)
 
-## Allocated To
-
-- UNIT-NNN (<unit name>)
-
 ## Interfaces
 
 - INT-NNN (<interface name>)
@@ -5194,10 +5270,6 @@ Format: **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
 - **Analysis:** Verified by technical evaluation
 - **Inspection:** Verified by examination
 - **Demonstration:** Verified by operation
-
-## Verified By
-
-- VER-NNN (<verification name>)
 
 ## Notes
 
@@ -5371,19 +5443,6 @@ Choose one:
 - **Standard:** <name and version, e.g., "SPI Mode 0", "PNG 1.2">
 - **Reference:** <URL or document reference>
 
-## Parties
-
-- **Provider:** UNIT-NNN (<unit name>) | External
-- **Consumer:** UNIT-NNN (<unit name>)
-
-Multiple consumers are common. List all units that use this interface.
-
-## Referenced By
-
-- REQ-NNN (<requirement name>)
-
-List all requirements that reference this interface.
-
 ## Specification
 
 <!-- For internal interfaces: This section IS the specification -->
@@ -5498,12 +5557,6 @@ Internal connections not formally specified as interfaces.
 - `<filepath>`: <description>
 
 List all source files that implement this unit.
-
-## Verification
-
-- `<test filepath>`: <what it tests>
-
-List all test files for this unit.
 
 ## Design Notes
 
@@ -5641,7 +5694,7 @@ Each requirement document defines a single, testable system behavior using the c
 
 > **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
 
-Requirements are traceable: each is allocated to design units (`UNIT-NNN`) and references interfaces (`INT-NNN`). Together they form a complete, verifiable description of system capability.
+Requirements are traceable: each references the interfaces (`INT-NNN`) it depends on, and design units reference the requirements they implement. Together they form a complete, verifiable description of system capability.
 
 ## Conventions
 
@@ -5696,7 +5749,6 @@ Interface types:
 - **Child interfaces:** `int_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `int_005.01_uart_registers.md`)
 - **Create new:** `.syskit/scripts/new-int.sh <name>` or `.syskit/scripts/new-int.sh --parent INT-NNN <name>`
 - **Cross-references:** Use `INT-NNN` or `INT-NNN.NN` identifiers (derived from filename)
-- **Parties:** Each interface has a Provider and one or more Consumers
 
 ## Table of Contents
 

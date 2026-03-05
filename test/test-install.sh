@@ -253,29 +253,28 @@ echo "Testing trace-sync..."
 # Undo the modification from manifest test
 git checkout -- doc/requirements/req_001_test_requirement.md 2>/dev/null || true
 
-# Add cross-reference: REQ-001 allocated to UNIT-001
-sed -i 's/- UNIT-NNN (<unit name>)/- UNIT-001 (Test Unit)/' doc/requirements/req_001_test_requirement.md
+# Add forward reference: UNIT-001 implements REQ-001
+sed -i 's/- REQ-NNN (<requirement name>)/- REQ-001 (Test Requirement)/' doc/design/unit_001_test_unit.md
 
-# Check mode should find missing back-reference
-if .syskit/scripts/trace-sync.sh 2>/dev/null | grep -q "MISSING"; then
-    pass "trace-sync.sh detects missing back-reference"
+# Valid forward reference should not produce broken refs
+if .syskit/scripts/trace-sync.sh 2>/dev/null | grep -q "BROKEN"; then
+    fail "trace-sync.sh reports broken ref for valid forward reference"
 else
-    fail "trace-sync.sh did not detect missing back-reference"
+    pass "trace-sync.sh accepts valid forward reference"
 fi
 
-# Fix mode should resolve it
-if .syskit/scripts/trace-sync.sh --fix 2>/dev/null | grep -q "FIXED"; then
-    pass "trace-sync.sh --fix adds missing back-reference"
+# Add a broken reference to a nonexistent ID
+sed -i 's/- REQ-001 (Test Requirement)/- REQ-001 (Test Requirement)\n- REQ-999 (Nonexistent)/' doc/design/unit_001_test_unit.md
+
+# Should detect the broken reference
+if .syskit/scripts/trace-sync.sh 2>/dev/null | grep -q "BROKEN"; then
+    pass "trace-sync.sh detects broken reference to nonexistent ID"
 else
-    fail "trace-sync.sh --fix did not add back-reference"
+    fail "trace-sync.sh did not detect broken reference"
 fi
 
-# Verify: no more MISSING after fix (orphans may remain)
-if .syskit/scripts/trace-sync.sh 2>/dev/null | grep -q "MISSING"; then
-    fail "trace-sync.sh still reports missing references after fix"
-else
-    pass "trace-sync.sh confirms no missing references after fix"
-fi
+# Remove the broken reference
+sed -i '/REQ-999/d' doc/design/unit_001_test_unit.md
 
 echo ""
 echo "Testing trace.sh..."
@@ -294,11 +293,11 @@ else
     fail "trace.sh missing root node"
 fi
 
-# trace.sh should show the Allocated To section with UNIT-001
-if .syskit/scripts/trace.sh REQ-001 2>/dev/null | grep -q "SECTION Allocated To"; then
-    pass "trace.sh shows Allocated To section"
+# trace.sh should show the Implemented By section (reverse lookup from UNIT-001)
+if .syskit/scripts/trace.sh REQ-001 2>/dev/null | grep -q "SECTION Implemented By"; then
+    pass "trace.sh shows Implemented By section (reverse lookup)"
 else
-    fail "trace.sh missing Allocated To section"
+    fail "trace.sh missing Implemented By section"
 fi
 
 # trace.sh should include UNIT-001 as a neighbor node

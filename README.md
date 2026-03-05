@@ -69,7 +69,9 @@ my-project/
     │   ├── find-task.sh
     │   ├── assemble-chunks.sh
     │   ├── toc-update.sh
+    │   ├── trace-lib.sh
     │   ├── trace-sync.sh
+    │   ├── trace-query.sh
     │   ├── impl-stamp.sh
     │   └── impl-check.sh
     ├── prompts/
@@ -140,8 +142,11 @@ Run this after modifying spec documents to update the hash manifest. The manifes
 ### Verifying Implementation Consistency
 
 ```bash
-# Check that cross-references between documents are consistent
+# Validate forward references (broken refs, direction violations, orphans)
 .syskit/scripts/trace-sync.sh
+
+# Reverse lookup: what implements/verifies a given document?
+.syskit/scripts/trace-query.sh REQ-001
 
 # Update Spec-ref hashes after implementing a design unit
 .syskit/scripts/impl-stamp.sh UNIT-NNN
@@ -183,11 +188,14 @@ Data layouts, register maps, protocol encodings, and field definitions belong he
 
 ### Cross-References
 
-Documents link to each other using `REQ-NNN`, `INT-NNN`, `UNIT-NNN`, and `VER-NNN` identifiers to create a traceability web:
+Documents link to each other using `REQ-NNN`, `INT-NNN`, `UNIT-NNN`, and `VER-NNN` identifiers. References flow in one direction (upward):
 
-- Requirements → interfaces they constrain, design units that implement them, verifications that prove them
-- Design units → requirements they satisfy, interfaces they provide or consume
-- Verifications → requirements they verify, design units they exercise
+- **INT** → references nothing
+- **REQ** → interfaces they depend on
+- **UNIT** → requirements they satisfy, interfaces they provide or consume
+- **VER** → requirements they verify, design units they exercise
+
+Use `trace-query.sh` for reverse lookups (e.g., "what implements REQ-001?").
 
 ## Development
 

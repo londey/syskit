@@ -28,26 +28,39 @@ All document types support two-level hierarchy using dot-notation. Child documen
 
 Top-level IDs use 3-digit padding (`NNN`). Children use 2-digit padding (`.NN`). Hierarchy is limited to two levels.
 
-## Bidirectional Links
+## Reference Direction Rules
 
-The following links must be maintained bidirectionally:
+References flow in one direction only — from more concrete documents toward more abstract ones:
 
-- REQ "Allocated To" ↔ UNIT "Implements Requirements"
-- REQ "Interfaces" ↔ INT "Referenced By"
-- UNIT "Provides" ↔ INT "Parties Provider"
-- UNIT "Consumes" ↔ INT "Parties Consumer"
-- VER "Verifies Requirements" ↔ REQ "Verified By"
-- VER "Verified Design Units" ↔ UNIT "Verification"
+- **INT** — References no other syskit documents
+- **REQ** — May reference INT only (via `## Interfaces`)
+- **UNIT** — May reference REQ and INT (via `## Implements Requirements`, `### Provides`, `### Consumes`)
+- **VER** — May reference REQ, UNIT, and INT (via `## Verifies Requirements`, `## Verified Design Units`)
 
-## Cross-Reference Sync
+This means each document only declares its own forward references. There are no back-reference sections to maintain, so changes to one document do not cascade into others.
 
-After modifying cross-references, run the sync tool:
+## Cross-Reference Validation
+
+Run the validation tool to check for issues:
 
 ```bash
-.syskit/scripts/trace-sync.sh          # check mode — report issues
-.syskit/scripts/trace-sync.sh --fix    # fix mode — add missing back-references
+.syskit/scripts/trace-sync.sh
 ```
 
-This tool verifies bidirectional links and reports broken references (IDs with no matching file) and orphan documents.
+This reports:
+- **Broken references** — IDs that point to nonexistent documents
+- **Direction violations** — References that violate the hierarchy (e.g., a REQ referencing a UNIT)
+- **Orphans** — Documents not referenced by anything (excluding VER, which sits at the top)
 
-**Important:** Do not write custom scripts for traceability updates. Use `trace-sync.sh`.
+## Reverse Lookups
+
+To find what references a given document, use the query tool:
+
+```bash
+.syskit/scripts/trace-query.sh REQ-001        # What implements/verifies this?
+.syskit/scripts/trace-query.sh INT-003        # Who provides/consumes/references this?
+.syskit/scripts/trace-query.sh UNIT-005       # What verifies this unit?
+.syskit/scripts/trace-query.sh --coverage     # Full traceability matrix
+.syskit/scripts/trace-query.sh --unimplemented # REQs with no UNIT implementing them
+.syskit/scripts/trace-query.sh --unverified    # REQs with no VER verifying them
+```

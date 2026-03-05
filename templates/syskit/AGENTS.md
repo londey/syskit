@@ -99,7 +99,7 @@ After spec changes are approved:
 
 1. Delegate implementation to a subagent — subagent reads the task file and all referenced files, makes changes, verifies, returns a summary
 2. After each task, run post-implementation scripts to verify consistency
-3. Run `.syskit/scripts/trace-sync.sh` to verify cross-references are consistent
+3. Run `.syskit/scripts/trace-sync.sh` to validate forward references
 4. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
 5. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
 6. After doc changes, run `.syskit/scripts/arch-update.sh` to refresh ARCHITECTURE.md
@@ -171,7 +171,16 @@ Helper scripts:
 
 Use `REQ-NNN`, `INT-NNN`, `UNIT-NNN`, `VER-NNN` identifiers (or `REQ-NNN.NN`, `INT-NNN.NN`, `UNIT-NNN.NN`, `VER-NNN.NN` for children) when referencing between documents.
 
-For detailed cross-reference rules and the sync tool, see `.syskit/ref/cross-references.md`.
+References are unidirectional — each document only declares forward references, never back-references:
+
+- **INT** → references nothing
+- **REQ** → may reference INT
+- **UNIT** → may reference REQ and INT
+- **VER** → may reference REQ, UNIT, and INT
+
+Use `.syskit/scripts/trace-query.sh <ID>` for reverse lookups (e.g., "what implements REQ-001?").
+
+For detailed rules, see `.syskit/ref/cross-references.md`.
 
 For Spec-ref implementation traceability, see `.syskit/ref/spec-ref.md`.
 

@@ -136,10 +136,6 @@ cat > "$FILEPATH" << EOF
 
 - \`<filepath>\`: <description>
 
-## Verification
-
-- \`<test filepath>\`: <what it tests>
-
 ## Design Notes
 
 <Additional design considerations, tradeoffs, alternatives considered>

@@ -116,10 +116,6 @@ When [condition/trigger], the system SHALL [observable behavior/response].
 
 - ${PARENT_DISPLAY}
 
-## Allocated To
-
-- UNIT-NNN (<unit name>)
-
 ## Interfaces
 
 - INT-NNN (<interface name>)
@@ -127,10 +123,6 @@ When [condition/trigger], the system SHALL [observable behavior/response].
 ## Verification Method
 
 <How this requirement will be verified>
-
-## Verified By
-
-- VER-NNN (<verification name>)
 
 ## Notes
 

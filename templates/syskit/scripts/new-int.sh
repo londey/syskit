@@ -100,15 +100,6 @@ Internal | External Standard | External Service
 - **Standard:** <name and version>
 - **Reference:** <URL or document reference>
 
-## Parties
-
-- **Provider:** UNIT-NNN (<unit name>) | External
-- **Consumer:** UNIT-NNN (<unit name>)
-
-## Referenced By
-
-- REQ-NNN (<requirement name>)
-
 ## Specification
 
 <!-- For internal interfaces, define the specification here -->

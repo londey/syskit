@@ -3439,7 +3439,7 @@ You are extracting implementation scope from approved specification changes.
 
 6. For each specification change, identify:
    - Which source files need modification (from design unit Implementation sections)
-   - Which test files need modification or creation (from design unit and verification Test Implementation sections)
+   - Which test files need modification or creation (from verification Test Implementation sections)
    - Which verification documents need updating if requirements or design unit behavior changed
    - Dependencies between changes (what must be done first)
    - How to verify the change was implemented correctly
@@ -3933,7 +3933,6 @@ Every requirement must use the condition/response pattern:
 
 - **SHALL** = mandatory, **SHOULD** = recommended, **MAY** = optional
 - Reference interfaces with `INT-NNN`
-- Allocate to design units with `UNIT-NNN`
 
 ## Quality Criteria
 
@@ -5162,7 +5161,7 @@ After the tree, provide a brief coverage assessment:
 
 1. **Trace completeness** — Flag any sections that are empty or contain only placeholders (TBD, None, etc.). For example:
    - A requirement with no "Implemented By" unit → "Not yet implemented by a design unit"
-   - A requirement with no "Verified By" → "No verification defined"
+   - A requirement not verified by any VER document → "No verification defined"
    - A design unit with no "Implements Requirements" → "No requirements traced"
    - An interface with no provider or consumer → "No units provide or consume this interface"
 

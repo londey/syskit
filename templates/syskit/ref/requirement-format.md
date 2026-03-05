@@ -8,7 +8,6 @@ Every requirement must use the condition/response pattern:
 
 - **SHALL** = mandatory, **SHOULD** = recommended, **MAY** = optional
 - Reference interfaces with `INT-NNN`
-- Allocate to design units with `UNIT-NNN`
 
 ## Quality Criteria
 

@@ -24,7 +24,7 @@ You are extracting implementation scope from approved specification changes.
 
 6. For each specification change, identify:
    - Which source files need modification (from design unit Implementation sections)
-   - Which test files need modification or creation (from design unit and verification Test Implementation sections)
+   - Which test files need modification or creation (from verification Test Implementation sections)
    - Which verification documents need updating if requirements or design unit behavior changed
    - Dependencies between changes (what must be done first)
    - How to verify the change was implemented correctly

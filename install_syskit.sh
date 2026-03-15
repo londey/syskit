@@ -1143,10 +1143,16 @@ while IFS= read -r impl_path; do
     fi
 
     if grep -q "Spec-ref:.*${UNIT_BASENAME}" "$PROJECT_ROOT/$impl_path"; then
-        # Update hash and date, preserving comment prefix
-        sed_inplace "s|\(Spec-ref:[[:space:]]*${UNIT_BASENAME}[[:space:]]*\)\`[0-9a-f]\{16\}\`[[:space:]]*[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}|\1\`${CURRENT_HASH}\` ${TODAY}|" "$PROJECT_ROOT/$impl_path"
-        echo "✓ updated    — $impl_path"
-        UPDATED=$((UPDATED + 1))
+        # Extract existing hash to avoid unnecessary date-only changes
+        EXISTING_HASH=$(grep "Spec-ref:.*${UNIT_BASENAME}" "$PROJECT_ROOT/$impl_path" | grep -oE '\`[0-9a-f]{16}\`' | tr -d '`' | head -1)
+        if [ "$EXISTING_HASH" = "$CURRENT_HASH" ]; then
+            echo "· current    — $impl_path"
+        else
+            # Update hash and date, preserving comment prefix
+            sed_inplace "s|\(Spec-ref:[[:space:]]*${UNIT_BASENAME}[[:space:]]*\)\`[0-9a-f]\{16\}\`[[:space:]]*[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}|\1\`${CURRENT_HASH}\` ${TODAY}|" "$PROJECT_ROOT/$impl_path"
+            echo "✓ updated    — $impl_path"
+            UPDATED=$((UPDATED + 1))
+        fi
     else
         echo "⚠ no Spec-ref — $impl_path"
         WARNED=$((WARNED + 1))

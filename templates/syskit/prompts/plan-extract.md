@@ -22,16 +22,24 @@ You are extracting implementation scope from approved specification changes.
 
 5. If the changes affected framework documents (quality_metrics.md, states_and_modes.md, concept_of_execution.md, design_decisions.md, test_strategy.md, README.md files) or `ARCHITECTURE.md`, read those files to understand what changed and whether implementation tasks are needed.
 
-6. For each specification change, identify:
+6. Read `CLAUDE.md` from the project root (if it exists). Look for:
+   - Workflow ordering constraints (e.g., "implement X before Y")
+   - Implementation sequencing rules (e.g., "digital twin first, then RTL")
+   - Project-specific conventions that affect how changes should be implemented
+
+   Apply any constraints found when determining task dependencies and ordering in the next step.
+
+7. For each specification change, identify:
    - Which source files need modification (from design unit Implementation sections)
    - Which test files need modification or creation (from verification Test Implementation sections)
    - Which verification documents need updating if requirements or design unit behavior changed
    - Dependencies between changes (what must be done first)
+   - Workflow ordering from CLAUDE.md (what must be done first)
    - How to verify the change was implemented correctly
 
-7. Create the task folder: `{{TASK_FOLDER}}`
+8. Create the task folder: `{{TASK_FOLDER}}`
 
-8. Write `plan.md` to the task folder:
+9. Write `plan.md` to the task folder:
 
    ```markdown
    # Implementation Plan: <change name>
@@ -70,7 +78,7 @@ You are extracting implementation scope from approved specification changes.
    - <risk or consideration>
    ```
 
-9. Write individual task files `task_NNN_<name>.md` to the task folder:
+10. Write individual task files `task_NNN_<name>.md` to the task folder:
 
    ```markdown
    # Task NNN: <task name>
@@ -107,7 +115,7 @@ You are extracting implementation scope from approved specification changes.
    <Any additional context or considerations>
    ```
 
-10. After writing all files, return ONLY this compact summary (nothing else):
+11. After writing all files, return ONLY this compact summary (nothing else):
 
    PLAN_SUMMARY_START
    Task folder: <path to task folder>

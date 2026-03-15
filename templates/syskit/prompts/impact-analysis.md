@@ -26,7 +26,9 @@ You are analyzing the impact of a proposed change on specification documents.
    - All cross-references to other documents (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN mentions)
    - A brief summary of what the document specifies (1-2 sentences)
 
-3. Analyze each document against the proposed change. Categorize as:
+3. For any design unit (`doc/design/unit_*.md`) that you categorize as DIRECT or INTERFACE in the next step, also note the source files listed in its `## Implementation` section. You will include these as affected implementation artifacts in the output.
+
+4. Analyze each document against the proposed change. Categorize as:
    - **DIRECT**: The document itself describes something being changed
    - **INTERFACE**: The document defines or uses an interface affected by the change
    - **DEPENDENT**: The document depends on something being changed (via REQ/INT/UNIT references to a DIRECT or INTERFACE document)
@@ -40,7 +42,7 @@ You are analyzing the impact of a proposed change on specification documents.
    - If a design unit is DIRECT, check which requirements it implements (review for DEPENDENT impact)
    - If a design unit is DIRECT, check which verifications have it in "Verified Design Units" (those are DEPENDENT)
 
-4. Write your complete analysis to `{{ANALYSIS_FOLDER}}/impact.md` in this format:
+5. Write your complete analysis to `{{ANALYSIS_FOLDER}}/impact.md` in this format:
 
    ```markdown
    # Impact Analysis: <brief change summary>
@@ -80,6 +82,12 @@ You are analyzing the impact of a proposed change on specification documents.
    - **Impact:** <what specifically is affected>
    - **Action Required:** <modify/review/no change>
 
+   ## Affected Implementation Files
+
+   ### <UNIT-NNN>: <unit title>
+   - **Source files:** <list from Implementation section>
+   - **Impact:** <what implementation changes are implied by the spec change>
+
    ## Summary
 
    - **Total Documents:** <n>
@@ -97,7 +105,7 @@ You are analyzing the impact of a proposed change on specification documents.
    If a category has no documents, include the heading with "None." underneath.
    Do not list individual unaffected documents — the summary counts are sufficient.
 
-5. After writing the file, return ONLY this compact summary (nothing else):
+6. After writing the file, return ONLY this compact summary (nothing else):
 
    IMPACT_SUMMARY_START
    Total: <n> documents analyzed

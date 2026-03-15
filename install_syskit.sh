@@ -3227,7 +3227,9 @@ You are analyzing the impact of a proposed change on specification documents.
    - All cross-references to other documents (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN mentions)
    - A brief summary of what the document specifies (1-2 sentences)
 
-3. Analyze each document against the proposed change. Categorize as:
+3. For any design unit (`doc/design/unit_*.md`) that you categorize as DIRECT or INTERFACE in the next step, also note the source files listed in its `## Implementation` section. You will include these as affected implementation artifacts in the output.
+
+4. Analyze each document against the proposed change. Categorize as:
    - **DIRECT**: The document itself describes something being changed
    - **INTERFACE**: The document defines or uses an interface affected by the change
    - **DEPENDENT**: The document depends on something being changed (via REQ/INT/UNIT references to a DIRECT or INTERFACE document)
@@ -3241,7 +3243,7 @@ You are analyzing the impact of a proposed change on specification documents.
    - If a design unit is DIRECT, check which requirements it implements (review for DEPENDENT impact)
    - If a design unit is DIRECT, check which verifications have it in "Verified Design Units" (those are DEPENDENT)
 
-4. Write your complete analysis to `{{ANALYSIS_FOLDER}}/impact.md` in this format:
+5. Write your complete analysis to `{{ANALYSIS_FOLDER}}/impact.md` in this format:
 
    ```markdown
    # Impact Analysis: <brief change summary>
@@ -3281,6 +3283,12 @@ You are analyzing the impact of a proposed change on specification documents.
    - **Impact:** <what specifically is affected>
    - **Action Required:** <modify/review/no change>
 
+   ## Affected Implementation Files
+
+   ### <UNIT-NNN>: <unit title>
+   - **Source files:** <list from Implementation section>
+   - **Impact:** <what implementation changes are implied by the spec change>
+
    ## Summary
 
    - **Total Documents:** <n>
@@ -3298,7 +3306,7 @@ You are analyzing the impact of a proposed change on specification documents.
    If a category has no documents, include the heading with "None." underneath.
    Do not list individual unaffected documents — the summary counts are sufficient.
 
-5. After writing the file, return ONLY this compact summary (nothing else):
+6. After writing the file, return ONLY this compact summary (nothing else):
 
    IMPACT_SUMMARY_START
    Total: <n> documents analyzed
@@ -3344,6 +3352,10 @@ Read all files listed in:
 - **"Specification References"** — the spec documents that define the required behavior
 
 Read each file from disk. Understand what the specification requires and what the current implementation looks like.
+
+### 2.5. Check Project Rules
+
+Read `CLAUDE.md` from the project root (if it exists). Look for any project-specific implementation rules, workflow constraints, or conventions that apply to the files you are about to modify. If `CLAUDE.md` specifies an implementation ordering (e.g., "implement in X before Y"), verify that prerequisite work has been completed before proceeding. If it has not, STOP and report the unmet dependency in your summary instead of implementing.
 
 ### 3. Implement
 
@@ -3437,16 +3449,24 @@ You are extracting implementation scope from approved specification changes.
 
 5. If the changes affected framework documents (quality_metrics.md, states_and_modes.md, concept_of_execution.md, design_decisions.md, test_strategy.md, README.md files) or `ARCHITECTURE.md`, read those files to understand what changed and whether implementation tasks are needed.
 
-6. For each specification change, identify:
+6. Read `CLAUDE.md` from the project root (if it exists). Look for:
+   - Workflow ordering constraints (e.g., "implement X before Y")
+   - Implementation sequencing rules (e.g., "digital twin first, then RTL")
+   - Project-specific conventions that affect how changes should be implemented
+
+   Apply any constraints found when determining task dependencies and ordering in the next step.
+
+7. For each specification change, identify:
    - Which source files need modification (from design unit Implementation sections)
    - Which test files need modification or creation (from verification Test Implementation sections)
    - Which verification documents need updating if requirements or design unit behavior changed
    - Dependencies between changes (what must be done first)
+   - Workflow ordering from CLAUDE.md (what must be done first)
    - How to verify the change was implemented correctly
 
-7. Create the task folder: `{{TASK_FOLDER}}`
+8. Create the task folder: `{{TASK_FOLDER}}`
 
-8. Write `plan.md` to the task folder:
+9. Write `plan.md` to the task folder:
 
    ```markdown
    # Implementation Plan: <change name>
@@ -3485,7 +3505,7 @@ You are extracting implementation scope from approved specification changes.
    - <risk or consideration>
    ```
 
-9. Write individual task files `task_NNN_<name>.md` to the task folder:
+10. Write individual task files `task_NNN_<name>.md` to the task folder:
 
    ```markdown
    # Task NNN: <task name>
@@ -3522,7 +3542,7 @@ You are extracting implementation scope from approved specification changes.
    <Any additional context or considerations>
    ```
 
-10. After writing all files, return ONLY this compact summary (nothing else):
+11. After writing all files, return ONLY this compact summary (nothing else):
 
    PLAN_SUMMARY_START
    Task folder: <path to task folder>

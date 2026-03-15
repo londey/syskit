@@ -30,6 +30,10 @@ Read all files listed in:
 
 Read each file from disk. Understand what the specification requires and what the current implementation looks like.
 
+### 2.5. Check Project Rules
+
+Read `CLAUDE.md` from the project root (if it exists). Look for any project-specific implementation rules, workflow constraints, or conventions that apply to the files you are about to modify. If `CLAUDE.md` specifies an implementation ordering (e.g., "implement in X before Y"), verify that prerequisite work has been completed before proceeding. If it has not, STOP and report the unmet dependency in your summary instead of implementing.
+
 ### 3. Implement
 
 Follow the task's implementation steps:

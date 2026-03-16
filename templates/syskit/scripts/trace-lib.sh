@@ -112,6 +112,29 @@ parse_forward_refs() {
     done
 }
 
+# ─── Ver-ref Scanning ─────────────────────────────────────────────
+
+declare -A VER_REF_FILES   # ver_basename -> "test_file1 test_file2 ..."
+
+scan_ver_refs() {
+    local files
+    files=$(git ls-files --cached --others --exclude-standard 2>/dev/null | grep -v '^\.syskit/' | xargs grep -lI "Ver-ref:" 2>/dev/null || true)
+    [ -z "$files" ] && return
+
+    local src_file line ver_basename
+    for src_file in $files; do
+        while IFS= read -r line; do
+            ver_basename=$(echo "$line" | sed -n 's/.*Ver-ref:[[:space:]]*\([^ ]*\.md\).*/\1/p')
+            [ -z "$ver_basename" ] && continue
+            VER_REF_FILES["$ver_basename"]="${VER_REF_FILES[$ver_basename]:-}${VER_REF_FILES[$ver_basename]:+ }$src_file"
+        done < <(grep "Ver-ref:" "$src_file")
+    done
+}
+
+ver_method() { # <ver_file> -> "Test", "Analysis", "Inspection", "Demonstration", or ""
+    section_lines "$1" "## Verification Method" 2 | grep -oE '\*\*(Test|Analysis|Inspection|Demonstration)\*\*' | head -1 | tr -d '*'
+}
+
 # ─── ID Counts ─────────────────────────────────────────────────────
 
 count_ids() {

@@ -102,9 +102,11 @@ After spec changes are approved:
 3. Run `.syskit/scripts/trace-sync.sh` to validate forward references
 4. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
 5. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
-6. After doc changes, run `.syskit/scripts/arch-update.sh` to refresh ARCHITECTURE.md
-7. After doc changes, run `.syskit/scripts/manifest.sh` to update the manifest
-8. Run `.syskit/scripts/template-check.sh` to verify documents conform to current templates
+6. Run `.syskit/scripts/ver-stamp.sh VER-NNN` for each modified VER to update Ver-ref hashes
+7. Run `.syskit/scripts/ver-check.sh` to verify test freshness
+8. After doc changes, run `.syskit/scripts/arch-update.sh` to refresh ARCHITECTURE.md
+9. After doc changes, run `.syskit/scripts/manifest.sh` to update the manifest
+10. Run `.syskit/scripts/template-check.sh` to verify documents conform to current templates
 
 ### Context Budget Management
 
@@ -183,6 +185,8 @@ Use `.syskit/scripts/trace-query.sh <ID>` for reverse lookups (e.g., "what imple
 For detailed rules, see `.syskit/ref/cross-references.md`.
 
 For Spec-ref implementation traceability, see `.syskit/ref/spec-ref.md`.
+
+For Ver-ref test traceability, see `.syskit/ref/ver-ref.md`.
 
 ## Architecture Overview
 

@@ -147,9 +147,11 @@ After spec changes are approved:
 3. Run `.syskit/scripts/trace-sync.sh` to validate forward references
 4. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
 5. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
-6. After doc changes, run `.syskit/scripts/arch-update.sh` to refresh ARCHITECTURE.md
-7. After doc changes, run `.syskit/scripts/manifest.sh` to update the manifest
-8. Run `.syskit/scripts/template-check.sh` to verify documents conform to current templates
+6. Run `.syskit/scripts/ver-stamp.sh VER-NNN` for each modified VER to update Ver-ref hashes
+7. Run `.syskit/scripts/ver-check.sh` to verify test freshness
+8. After doc changes, run `.syskit/scripts/arch-update.sh` to refresh ARCHITECTURE.md
+9. After doc changes, run `.syskit/scripts/manifest.sh` to update the manifest
+10. Run `.syskit/scripts/template-check.sh` to verify documents conform to current templates
 
 ### Context Budget Management
 
@@ -228,6 +230,8 @@ Use `.syskit/scripts/trace-query.sh <ID>` for reverse lookups (e.g., "what imple
 For detailed rules, see `.syskit/ref/cross-references.md`.
 
 For Spec-ref implementation traceability, see `.syskit/ref/spec-ref.md`.
+
+For Ver-ref test traceability, see `.syskit/ref/ver-ref.md`.
 
 ## Architecture Overview
 
@@ -2550,6 +2554,29 @@ parse_forward_refs() {
     done
 }
 
+# ─── Ver-ref Scanning ─────────────────────────────────────────────
+
+declare -A VER_REF_FILES   # ver_basename -> "test_file1 test_file2 ..."
+
+scan_ver_refs() {
+    local files
+    files=$(git ls-files --cached --others --exclude-standard 2>/dev/null | grep -v '^\.syskit/' | xargs grep -lI "Ver-ref:" 2>/dev/null || true)
+    [ -z "$files" ] && return
+
+    local src_file line ver_basename
+    for src_file in $files; do
+        while IFS= read -r line; do
+            ver_basename=$(echo "$line" | sed -n 's/.*Ver-ref:[[:space:]]*\([^ ]*\.md\).*/\1/p')
+            [ -z "$ver_basename" ] && continue
+            VER_REF_FILES["$ver_basename"]="${VER_REF_FILES[$ver_basename]:-}${VER_REF_FILES[$ver_basename]:+ }$src_file"
+        done < <(grep "Ver-ref:" "$src_file")
+    done
+}
+
+ver_method() { # <ver_file> -> "Test", "Analysis", "Inspection", "Demonstration", or ""
+    section_lines "$1" "## Verification Method" 2 | grep -oE '\*\*(Test|Analysis|Inspection|Demonstration)\*\*' | head -1 | tr -d '*'
+}
+
 # ─── ID Counts ─────────────────────────────────────────────────────
 
 count_ids() {
@@ -2575,6 +2602,7 @@ cat > ".syskit/scripts/trace-query.sh" << '__SYSKIT_TEMPLATE_END__'
 #        trace-query.sh --coverage       — full traceability matrix
 #        trace-query.sh --unimplemented  — REQs with no UNIT implementing them
 #        trace-query.sh --unverified     — REQs with no VER verifying them
+#        trace-query.sh --untested      — VERs with method=Test but no Ver-ref in test files
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -2667,7 +2695,41 @@ query_id() {
             ;;
 
         VER-*)
-            echo "(VER documents are at the top of the reference hierarchy — nothing references them)"
+            echo "## Verifies Requirements"
+            for key in "${!REFS[@]}"; do
+                [[ "$key" == ver_req:$target ]] || continue
+                for t in ${REFS[$key]}; do
+                    echo "- $t (${ID_TO_NAME[$t]:-})"
+                    found=true
+                done
+            done
+            $found || echo "- (none)"
+
+            echo ""
+            echo "## Verified Design Units"
+            found=false
+            for key in "${!REFS[@]}"; do
+                [[ "$key" == ver_unit:$target ]] || continue
+                for t in ${REFS[$key]}; do
+                    echo "- $t (${ID_TO_NAME[$t]:-})"
+                    found=true
+                done
+            done
+            $found || echo "- (none)"
+
+            echo ""
+            echo "## Test Files (Ver-ref)"
+            found=false
+            scan_ver_refs
+            local base
+            base=$(basename "${ID_TO_FILE[$target]}")
+            if [ -n "${VER_REF_FILES[$base]:-}" ]; then
+                for tf in ${VER_REF_FILES[$base]}; do
+                    echo "- \`$tf\`"
+                    found=true
+                done
+            fi
+            $found || echo "- (none)"
             ;;
     esac
 }
@@ -2760,6 +2822,29 @@ report_unverified() {
     echo "$count unverified requirement(s)"
 }
 
+report_untested() {
+    echo "# Untested Verifications"
+    echo ""
+    echo "VER documents with method=Test that have no Ver-ref in any test file."
+    echo ""
+    scan_ver_refs
+    local count=0
+    for ver_id in $(echo "${!ALL_IDS[@]}" | tr ' ' '\n' | grep '^VER-' | sort); do
+        local file="${ID_TO_FILE[$ver_id]}"
+        local method
+        method=$(ver_method "$file")
+        [ "$method" != "Test" ] && continue
+        local base
+        base=$(basename "$file")
+        if [ -z "${VER_REF_FILES[$base]:-}" ]; then
+            echo "- $ver_id (${ID_TO_NAME[$ver_id]:-})"
+            count=$((count + 1))
+        fi
+    done
+    echo ""
+    echo "$count untested verification(s)"
+}
+
 # ─── Main ─────────────────────────────────────────────────────────
 
 if [ $# -eq 0 ]; then
@@ -2767,6 +2852,7 @@ if [ $# -eq 0 ]; then
     echo "       trace-query.sh --coverage       — full traceability matrix"
     echo "       trace-query.sh --unimplemented  — REQs with no UNIT"
     echo "       trace-query.sh --unverified     — REQs with no VER"
+    echo "       trace-query.sh --untested      — VERs with method=Test but no Ver-ref"
     exit 1
 fi
 
@@ -2777,6 +2863,7 @@ case "$1" in
     --coverage)      report_coverage ;;
     --unimplemented) report_unimplemented ;;
     --unverified)    report_unverified ;;
+    --untested)      report_untested ;;
     *)               query_id "$1" ;;
 esac
 __SYSKIT_TEMPLATE_END__
@@ -2875,6 +2962,56 @@ check_orphans() {
     done
 }
 
+# ─── Ver-ref Validation ───────────────────────────────────────────
+
+VER_REF_ISSUES=0
+
+check_ver_refs() {
+    # Check 1: Ver-ref targets exist (exclude .syskit/ reference docs which contain examples)
+    local files
+    files=$(git ls-files --cached --others --exclude-standard 2>/dev/null | grep -v '^\.syskit/' | xargs grep -lI "Ver-ref:" 2>/dev/null || true)
+
+    if [ -n "$files" ]; then
+        local src_file line ver_basename
+        for src_file in $files; do
+            while IFS= read -r line; do
+                ver_basename=$(echo "$line" | sed -n 's/.*Ver-ref:[[:space:]]*\([^ ]*\.md\).*/\1/p')
+                [ -z "$ver_basename" ] && continue
+                if [ ! -f "$VER_DIR/$ver_basename" ]; then
+                    echo "BROKEN   $src_file Ver-ref to $ver_basename — file not found"
+                    VER_REF_ISSUES=$((VER_REF_ISSUES + 1))
+                fi
+            done < <(grep "Ver-ref:" "$src_file")
+        done
+    fi
+
+    # Check 2: Test files listed in ## Test Implementation exist
+    for f in "$VER_DIR"/ver_[0-9]*.md; do
+        [ -f "$f" ] || continue
+        local base
+        base=$(basename "$f")
+        [[ "$base" == *_000_template* ]] && continue
+        local test_files
+        test_files=$(awk '
+            BEGIN { found = 0 }
+            $0 == "## Test Implementation" { found = 1; next }
+            found && /^#/ { match($0, /^#+/); if (RLENGTH <= 2) exit }
+            found && /^- `[^`]+`/ {
+                match($0, /`[^`]+`/)
+                path = substr($0, RSTART+1, RLENGTH-2)
+                if (path !~ /[<>]/) print path
+            }
+        ' "$f")
+        while IFS= read -r tpath; do
+            [ -z "$tpath" ] && continue
+            if [ ! -f "$PROJECT_ROOT/$tpath" ]; then
+                echo "BROKEN   $base lists test file $tpath in ## Test Implementation — file not found"
+                VER_REF_ISSUES=$((VER_REF_ISSUES + 1))
+            fi
+        done <<< "$test_files"
+    done
+}
+
 # ─── Main ─────────────────────────────────────────────────────────
 
 build_id_map
@@ -2894,11 +3031,12 @@ parse_forward_refs
 check_broken
 check_direction
 check_orphans
+check_ver_refs
 
 echo ""
-TOTAL=$((BROKEN + DIRECTION + ORPHANS))
+TOTAL=$((BROKEN + DIRECTION + ORPHANS + VER_REF_ISSUES))
 
-echo "Summary: ${BROKEN} broken, ${DIRECTION} direction violations, ${ORPHANS} orphans"
+echo "Summary: ${BROKEN} broken, ${DIRECTION} direction violations, ${ORPHANS} orphans, ${VER_REF_ISSUES} ver-ref issues"
 
 if [ "$TOTAL" -eq 0 ]; then
     echo "All cross-references are consistent."
@@ -3201,6 +3339,533 @@ done
 echo "TRACE_DATA_END"
 __SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/trace.sh"
+
+# --- .syskit/scripts/ver-check.sh ---
+info "Creating .syskit/scripts/ver-check.sh"
+cat > ".syskit/scripts/ver-check.sh" << '__SYSKIT_TEMPLATE_END__'
+#!/bin/bash
+# Check verification test freshness via Ver-ref comment hashes
+# Usage: ver-check.sh [VER-NNN | ver_NNN_name.md]
+#   No argument: full scan, generates .syskit/ver-status.md
+#   With argument: filter to one VER, stdout only
+# Exit codes: 0 = all current, 1 = stale or issues found
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+VER_DIR="$PROJECT_ROOT/doc/verification"
+REPORT="$PROJECT_ROOT/.syskit/ver-status.md"
+FILTER="${1:-}"
+
+cd "$PROJECT_ROOT"
+
+# Require bash 4+ for associative arrays
+if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    echo "Error: bash 4+ required (found ${BASH_VERSION})" >&2
+    exit 1
+fi
+
+# ─── Cross-platform hash command ─────────────────────────────────
+
+if command -v sha256sum &> /dev/null; then
+    hash_cmd() { sha256sum "$1" | cut -c1-16; }
+else
+    hash_cmd() { shasum -a 256 "$1" | cut -c1-16; }
+fi
+
+# ─── Resolve VER filter ──────────────────────────────────────────
+
+FILTER_BASENAME=""
+
+if [ -n "$FILTER" ]; then
+    # Try direct basename match
+    if [ -f "$VER_DIR/$FILTER" ]; then
+        FILTER_BASENAME="$FILTER"
+    else
+        # Check for hierarchical ID (VER-NNN.NN)
+        if echo "$FILTER" | grep -qE '[0-9]{3}\.[0-9]{2}'; then
+            num=$(echo "$FILTER" | grep -oE '[0-9]{3}\.[0-9]{2}' | head -1)
+            matches=("$VER_DIR"/ver_${num}_*.md)
+        else
+            # Extract 3-digit number from VER-NNN, ver-NNN, etc.
+            num=$(echo "$FILTER" | grep -oE '[0-9]{3}' | head -1)
+            if [ -z "$num" ]; then
+                echo "Error: cannot parse VER number from '$FILTER'" >&2
+                exit 1
+            fi
+            matches=("$VER_DIR"/ver_${num}_*.md)
+        fi
+        if [ -f "${matches[0]}" ]; then
+            FILTER_BASENAME=$(basename "${matches[0]}")
+        else
+            echo "Error: no verification file found for '$FILTER'" >&2
+            exit 1
+        fi
+    fi
+fi
+
+# ─── Scan for Ver-ref lines ──────────────────────────────────────
+
+# source_file -> ver_basename:hash:date (one entry per Ver-ref line)
+declare -A VER_REFS        # "src_file|ver_basename" -> "hash date"
+declare -a REF_KEYS=()     # ordered list of "src_file|ver_basename" keys
+
+scan_ver_refs() {
+    local files
+    files=$(git ls-files --cached --others --exclude-standard 2>/dev/null | grep -v '^\.syskit/' | xargs grep -lI "Ver-ref:" 2>/dev/null || true)
+
+    [ -z "$files" ] && return
+
+    local src_file line ver_basename ref_hash ref_date
+    for src_file in $files; do
+        while IFS= read -r line; do
+            # Extract VER filename
+            ver_basename=$(echo "$line" | sed -n 's/.*Ver-ref:[[:space:]]*\([^ ]*\.md\).*/\1/p')
+            [ -z "$ver_basename" ] && continue
+
+            # Apply filter
+            if [ -n "$FILTER_BASENAME" ] && [ "$ver_basename" != "$FILTER_BASENAME" ]; then
+                continue
+            fi
+
+            # Extract hash (16 hex chars between backticks)
+            ref_hash=$(echo "$line" | sed -n 's/.*`\([0-9a-f]\{16\}\)`.*/\1/p')
+            [ -z "$ref_hash" ] && continue
+
+            # Extract date
+            ref_date=$(echo "$line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1)
+            [ -z "$ref_date" ] && ref_date="unknown"
+
+            local key="${src_file}|${ver_basename}"
+            VER_REFS["$key"]="$ref_hash $ref_date"
+            REF_KEYS+=("$key")
+        done < <(grep "Ver-ref:" "$src_file")
+    done
+}
+
+# ─── Parse Test Implementation sections from VER files ────────────
+
+declare -A VER_TEST_FILES  # ver_basename -> newline-separated list of file paths
+
+parse_test_sections() {
+    local f base test_files
+    for f in "$VER_DIR"/ver_[0-9]*.md; do
+        [ -f "$f" ] || continue
+        base=$(basename "$f")
+        [[ "$base" == *_000_template* ]] && continue
+
+        # Apply filter
+        if [ -n "$FILTER_BASENAME" ] && [ "$base" != "$FILTER_BASENAME" ]; then
+            continue
+        fi
+
+        test_files=$(awk '
+            BEGIN { found = 0 }
+            $0 == "## Test Implementation" { found = 1; next }
+            found && /^#/ { match($0, /^#+/); if (RLENGTH <= 2) exit }
+            found && /^- `[^`]+`/ {
+                match($0, /`[^`]+`/)
+                path = substr($0, RSTART+1, RLENGTH-2)
+                if (path !~ /[<>]/) print path
+            }
+        ' "$f")
+
+        [ -n "$test_files" ] && VER_TEST_FILES["$base"]="$test_files"
+    done
+}
+
+# ─── Compare hashes ──────────────────────────────────────────────
+
+CURRENT_COUNT=0
+STALE_COUNT=0
+MISSING_COUNT=0
+
+declare -a RESULT_LINES=()  # "status|src_file|ver_basename|ref_hash|current_hash|ref_date"
+
+compare_hashes() {
+    local key src_file ver_basename ref_hash ref_date current_hash ver_path status
+    for key in "${REF_KEYS[@]}"; do
+        src_file="${key%%|*}"
+        ver_basename="${key##*|}"
+        ref_hash=$(echo "${VER_REFS[$key]}" | cut -d' ' -f1)
+        ref_date=$(echo "${VER_REFS[$key]}" | cut -d' ' -f2)
+
+        ver_path="$VER_DIR/$ver_basename"
+        if [ ! -f "$ver_path" ]; then
+            status="missing"
+            current_hash="n/a"
+            MISSING_COUNT=$((MISSING_COUNT + 1))
+        else
+            current_hash=$(hash_cmd "$ver_path")
+            if [ "$ref_hash" = "$current_hash" ]; then
+                status="current"
+                CURRENT_COUNT=$((CURRENT_COUNT + 1))
+            else
+                status="stale"
+                STALE_COUNT=$((STALE_COUNT + 1))
+            fi
+        fi
+
+        RESULT_LINES+=("${status}|${src_file}|${ver_basename}|${ref_hash}|${current_hash}|${ref_date}")
+    done
+}
+
+# ─── Find untracked VERs ─────────────────────────────────────────
+
+UNTRACKED_COUNT=0
+
+declare -a UNTRACKED_LINES=()  # "ver_basename|test_files"
+
+find_untracked() {
+    local ver_basename test_list has_any_ref test_path key
+    for ver_basename in "${!VER_TEST_FILES[@]}"; do
+        test_list="${VER_TEST_FILES[$ver_basename]}"
+        has_any_ref=false
+
+        while IFS= read -r test_path; do
+            [ -z "$test_path" ] && continue
+            key="${test_path}|${ver_basename}"
+            if [ -n "${VER_REFS[$key]:-}" ]; then
+                has_any_ref=true
+                break
+            fi
+        done <<< "$test_list"
+
+        if ! $has_any_ref; then
+            # Collapse newlines to comma-separated for display
+            local display_files
+            display_files=$(echo "$test_list" | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g')
+            UNTRACKED_LINES+=("${ver_basename}|${display_files}")
+            UNTRACKED_COUNT=$((UNTRACKED_COUNT + 1))
+        fi
+    done
+}
+
+# ─── Report generation ───────────────────────────────────────────
+
+generate_report() {
+    local out="/dev/stdout"
+    if [ -z "$FILTER" ]; then
+        out="$REPORT"
+    fi
+
+    {
+        echo "# Verification Test Status"
+        echo ""
+        echo "Generated: $(date -Iseconds 2>/dev/null || date)"
+        echo ""
+        echo "## Summary"
+        echo ""
+        echo "- Current: $CURRENT_COUNT"
+        echo "- Stale: $STALE_COUNT"
+        echo "- Missing VER: $MISSING_COUNT"
+        echo "- Untracked VERs: $UNTRACKED_COUNT"
+        echo ""
+
+        if [ ${#RESULT_LINES[@]} -gt 0 ]; then
+            echo "## Ver-ref Status"
+            echo ""
+            echo "| Test File | VER | Ref Hash | Current Hash | Status | Sync Date |"
+            echo "|-----------|-----|----------|--------------|--------|-----------|"
+
+            local entry status src_file ver_basename ref_hash current_hash ref_date
+            for entry in "${RESULT_LINES[@]}"; do
+                IFS='|' read -r status src_file ver_basename ref_hash current_hash ref_date <<< "$entry"
+                # Derive VER-NNN or VER-NNN.NN from basename
+                local ver_num
+                ver_num=$(echo "$ver_basename" | sed -n 's/ver_\([0-9][0-9][0-9]\(\.[0-9][0-9]\)\?\)_.*/\1/p')
+                local ver_id="VER-${ver_num}"
+                echo "| \`$src_file\` | $ver_id | \`$ref_hash\` | \`$current_hash\` | $status | $ref_date |"
+            done
+            echo ""
+        fi
+
+        if [ ${#UNTRACKED_LINES[@]} -gt 0 ]; then
+            echo "## Untracked Verifications"
+            echo ""
+            echo "| VER | Listed Test Files |"
+            echo "|-----|-------------------|"
+
+            local entry ver_basename test_files ver_num ver_id
+            for entry in "${UNTRACKED_LINES[@]}"; do
+                ver_basename="${entry%%|*}"
+                test_files="${entry##*|}"
+                ver_num=$(echo "$ver_basename" | sed -n 's/ver_\([0-9][0-9][0-9]\(\.[0-9][0-9]\)\?\)_.*/\1/p')
+                ver_id="VER-${ver_num}"
+                echo "| $ver_id | \`$test_files\` |"
+            done
+            echo ""
+        fi
+    } > "$out"
+
+    if [ -z "$FILTER" ]; then
+        echo "Report written: $REPORT"
+    fi
+}
+
+# ─── Stdout summary ──────────────────────────────────────────────
+
+print_summary() {
+    local entry status src_file ver_basename
+
+    for entry in "${RESULT_LINES[@]}"; do
+        IFS='|' read -r status src_file ver_basename _ _ _ <<< "$entry"
+        case "$status" in
+            current) echo "✓ current — $src_file" ;;
+            stale)   echo "⚠ stale   — $src_file" ;;
+            missing) echo "✗ missing — $src_file (references $ver_basename)" ;;
+        esac
+    done
+
+    for entry in "${UNTRACKED_LINES[@]}"; do
+        ver_basename="${entry%%|*}"
+        echo "○ untracked — $ver_basename"
+    done
+}
+
+# ─── Main ─────────────────────────────────────────────────────────
+
+scan_ver_refs
+parse_test_sections
+compare_hashes
+find_untracked
+
+if [ -z "$FILTER" ]; then
+    generate_report
+    echo ""
+    print_summary
+else
+    generate_report
+fi
+
+echo ""
+TOTAL=$((STALE_COUNT + MISSING_COUNT + UNTRACKED_COUNT))
+
+if [ "$TOTAL" -eq 0 ] && [ $((CURRENT_COUNT + UNTRACKED_COUNT)) -eq 0 ]; then
+    echo "No Ver-ref lines found."
+elif [ "$TOTAL" -eq 0 ]; then
+    echo "All verification tests are current."
+else
+    echo "Summary: $CURRENT_COUNT current, $STALE_COUNT stale, $MISSING_COUNT missing, $UNTRACKED_COUNT untracked"
+fi
+
+exit $((TOTAL > 0 ? 1 : 0))
+__SYSKIT_TEMPLATE_END__
+chmod +x ".syskit/scripts/ver-check.sh"
+
+# --- .syskit/scripts/ver-stamp.sh ---
+info "Creating .syskit/scripts/ver-stamp.sh"
+cat > ".syskit/scripts/ver-stamp.sh" << '__SYSKIT_TEMPLATE_END__'
+#!/bin/bash
+# Update Ver-ref hashes in test files for a given verification document
+# Usage: ver-stamp.sh [VER-NNN | ver_NNN_name.md]
+#   No argument: stamp all VERs that have a ## Test Implementation section
+#   With argument: stamp one VER
+# Exit codes: 0 = all updated, 1 = warnings
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+VER_DIR="$PROJECT_ROOT/doc/verification"
+
+VER_ARG="${1:-}"
+
+cd "$PROJECT_ROOT"
+
+# Require bash 4+ for associative arrays
+if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    echo "Error: bash 4+ required (found ${BASH_VERSION})" >&2
+    exit 1
+fi
+
+# ─── Cross-platform hash command ─────────────────────────────────
+
+if command -v sha256sum &> /dev/null; then
+    hash_cmd() { sha256sum "$1" | cut -c1-16; }
+else
+    hash_cmd() { shasum -a 256 "$1" | cut -c1-16; }
+fi
+
+# ─── Cross-platform sed -i ───────────────────────────────────────
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed_inplace() { sed -i '' "$@"; }
+else
+    sed_inplace() { sed -i "$@"; }
+fi
+
+# ─── Resolve VER argument ────────────────────────────────────────
+
+resolve_ver() {
+    local arg="$1"
+
+    # Try direct basename match
+    if [ -f "$VER_DIR/$arg" ]; then
+        echo "$VER_DIR/$arg"
+        return 0
+    fi
+
+    # Check for hierarchical ID (VER-NNN.NN)
+    if echo "$arg" | grep -qE '[0-9]{3}\.[0-9]{2}'; then
+        local num
+        num=$(echo "$arg" | grep -oE '[0-9]{3}\.[0-9]{2}' | head -1)
+        local matches=("$VER_DIR"/ver_${num}_*.md)
+        if [ -f "${matches[0]}" ]; then
+            echo "${matches[0]}"
+            return 0
+        fi
+    else
+        # Extract 3-digit number from VER-NNN, ver-NNN, etc.
+        local num
+        num=$(echo "$arg" | grep -oE '[0-9]{3}' | head -1)
+        if [ -z "$num" ]; then
+            echo "Error: cannot parse VER number from '$arg'" >&2
+            return 1
+        fi
+
+        local matches=("$VER_DIR"/ver_${num}_*.md)
+        if [ -f "${matches[0]}" ]; then
+            echo "${matches[0]}"
+            return 0
+        fi
+    fi
+
+    echo "Error: no verification file found for '$arg'" >&2
+    return 1
+}
+
+# ─── Stamp a single VER file ─────────────────────────────────────
+
+TOTAL_UPDATED=0
+TOTAL_WARNED=0
+
+stamp_ver() {
+    local ver_file="$1"
+    local ver_basename
+    ver_basename=$(basename "$ver_file")
+
+    # Compute current hash
+    local current_hash today
+    current_hash=$(hash_cmd "$ver_file")
+    today=$(date +%Y-%m-%d)
+
+    echo "ver-stamp: $ver_basename"
+    echo "Hash: \`$current_hash\` ($today)"
+    echo ""
+
+    # Extract test file paths from ## Test Implementation
+    local test_files
+    test_files=$(awk '
+        BEGIN { found = 0 }
+        $0 == "## Test Implementation" { found = 1; next }
+        found && /^#/ { match($0, /^#+/); if (RLENGTH <= 2) exit }
+        found && /^- `[^`]+`/ {
+            match($0, /`[^`]+`/)
+            path = substr($0, RSTART+1, RLENGTH-2)
+            if (path !~ /[<>]/) print path
+        }
+    ' "$ver_file")
+
+    if [ -z "$test_files" ]; then
+        echo "No test files listed in ## Test Implementation section."
+        echo ""
+        return
+    fi
+
+    local updated=0
+    local warned=0
+
+    # Build set of listed files for orphan check
+    declare -A listed_files
+
+    # Process each test file
+    while IFS= read -r test_path; do
+        [ -z "$test_path" ] && continue
+        listed_files["$test_path"]=1
+
+        if [ ! -f "$PROJECT_ROOT/$test_path" ]; then
+            echo "⚠ not found  — $test_path"
+            warned=$((warned + 1))
+            continue
+        fi
+
+        if grep -q "Ver-ref:.*${ver_basename}" "$PROJECT_ROOT/$test_path"; then
+            # Extract existing hash to avoid unnecessary date-only changes
+            local existing_hash
+            existing_hash=$(grep "Ver-ref:.*${ver_basename}" "$PROJECT_ROOT/$test_path" | grep -oE '\`[0-9a-f]{16}\`' | tr -d '`' | head -1)
+            if [ "$existing_hash" = "$current_hash" ]; then
+                echo "· current    — $test_path"
+            else
+                # Update hash and date, preserving comment prefix
+                sed_inplace "s|\(Ver-ref:[[:space:]]*${ver_basename}[[:space:]]*\)\`[0-9a-f]\{16\}\`[[:space:]]*[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}|\1\`${current_hash}\` ${today}|" "$PROJECT_ROOT/$test_path"
+                echo "✓ updated    — $test_path"
+                updated=$((updated + 1))
+            fi
+        else
+            echo "⚠ no Ver-ref — $test_path"
+            warned=$((warned + 1))
+        fi
+    done <<< "$test_files"
+
+    # Scan for orphaned references
+    echo ""
+
+    local orphan_files
+    orphan_files=$(git ls-files --cached --others --exclude-standard 2>/dev/null | grep -v '^\.syskit/' | xargs grep -lI "Ver-ref:.*${ver_basename}" 2>/dev/null || true)
+
+    local orphan_found=0
+    if [ -n "$orphan_files" ]; then
+        while IFS= read -r orphan; do
+            [ -z "$orphan" ] && continue
+            if [ -z "${listed_files[$orphan]:-}" ]; then
+                echo "⚠ orphan     — $orphan (has Ver-ref to $ver_basename but not in ## Test Implementation)"
+                warned=$((warned + 1))
+                orphan_found=$((orphan_found + 1))
+            fi
+        done <<< "$orphan_files"
+    fi
+
+    if [ "$orphan_found" -eq 0 ]; then
+        echo "No orphaned references found."
+    fi
+
+    echo ""
+    echo "Summary: $updated updated, $warned warnings"
+    echo ""
+
+    TOTAL_UPDATED=$((TOTAL_UPDATED + updated))
+    TOTAL_WARNED=$((TOTAL_WARNED + warned))
+}
+
+# ─── Main ─────────────────────────────────────────────────────────
+
+if [ -n "$VER_ARG" ]; then
+    # Single VER mode
+    VER_FILE=$(resolve_ver "$VER_ARG")
+    stamp_ver "$VER_FILE"
+else
+    # All VERs mode
+    found_any=false
+    for f in "$VER_DIR"/ver_[0-9]*.md; do
+        [ -f "$f" ] || continue
+        base=$(basename "$f")
+        [[ "$base" == *_000_template* ]] && continue
+        found_any=true
+        stamp_ver "$f"
+    done
+
+    if ! $found_any; then
+        echo "No verification documents found in $VER_DIR."
+        exit 0
+    fi
+
+    echo "═══════════════════════════════════════"
+    echo "Total: $TOTAL_UPDATED updated, $TOTAL_WARNED warnings"
+fi
+
+exit $((TOTAL_WARNED > 0 ? 1 : 0))
+__SYSKIT_TEMPLATE_END__
+chmod +x ".syskit/scripts/ver-stamp.sh"
 
 # --- .syskit/prompts/impact-analysis.md ---
 info "Creating .syskit/prompts/impact-analysis.md"
@@ -4038,6 +4703,80 @@ When creating a new implementation file, add a placeholder Spec-ref line:
 ```
 
 Then run `impl-stamp.sh UNIT-NNN` to set the correct hash.
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/ref/ver-ref.md ---
+info "Creating .syskit/ref/ver-ref.md"
+cat > ".syskit/ref/ver-ref.md" << '__SYSKIT_TEMPLATE_END__'
+# Ver-ref: Test-to-Verification Traceability Reference
+
+Test files that implement a verification procedure include a `Ver-ref` comment linking back to the verification document:
+
+```text
+// Ver-ref: ver_003_watchdog.md `a1b2c3d4e5f6g7h8` 2026-03-16
+```
+
+- Filename: the verification document basename
+- Hash: 16-char truncated SHA256 of the VER file content
+- Date: when the test was last synced to the spec
+- Comment prefix matches the test language (`//`, `#`, `--`, etc.)
+
+## Multiple Ver-refs
+
+A test file may have multiple Ver-ref lines if it covers multiple verifications (common for integration tests):
+
+```text
+// Ver-ref: ver_003_watchdog.md `a1b2c3d4e5f6g7h8` 2026-03-16
+// Ver-ref: ver_007_timeout.md  `f8e7d6c5b4a39201` 2026-03-16
+```
+
+## Checking Test Freshness
+
+```bash
+.syskit/scripts/ver-check.sh              # full scan → .syskit/ver-status.md
+.syskit/scripts/ver-check.sh VER-003      # single VER → stdout
+```
+
+Status meanings:
+
+- ✓ current — test hash matches current VER spec
+- ⚠ stale — VER spec has changed since test was last synced
+- ✗ missing — Ver-ref points to a VER file that does not exist
+- ○ untracked — VER lists test files but none have Ver-ref back-references
+
+## Updating Ver-ref Hashes
+
+After modifying a verification document, update the Ver-ref hashes:
+
+```bash
+.syskit/scripts/ver-stamp.sh VER-003      # stamp one VER
+.syskit/scripts/ver-stamp.sh              # stamp all VERs
+```
+
+This reads the VER's `## Test Implementation` section, computes the current SHA256 of the VER file, and updates the hash and date in each test file's Ver-ref comment. It also warns about:
+
+- Test files listed in ## Test Implementation that have no Ver-ref line
+- Test files with Ver-ref to this VER that are not listed in ## Test Implementation (orphans)
+
+**Important:** Do not manually edit Ver-ref hash values. Always use `ver-stamp.sh`.
+
+## Creating New Test Files
+
+When creating a new test file for a verification, add a placeholder Ver-ref line:
+
+```text
+// Ver-ref: ver_NNN_name.md `0000000000000000` 1970-01-01
+```
+
+Then run `ver-stamp.sh VER-NNN` to set the correct hash.
+
+## Finding Untested Verifications
+
+To find VER documents with method=Test that have no Ver-ref in any test file:
+
+```bash
+.syskit/scripts/trace-query.sh --untested
+```
 __SYSKIT_TEMPLATE_END__
 
 # --- .claude/commands/syskit-approve.md ---
@@ -5919,6 +6658,8 @@ For automated tests, describe what the test does at a level useful for understan
 - `<test filepath>`: <description of what this test file does>
 
 List all test source files that implement this verification.
+Each test file listed here should contain a `Ver-ref` comment pointing back to this document.
+See `.syskit/ref/ver-ref.md` for the Ver-ref format and workflow.
 
 ## Notes
 

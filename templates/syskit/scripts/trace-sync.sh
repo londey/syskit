@@ -88,6 +88,56 @@ check_orphans() {
     done
 }
 
+# ─── Ver-ref Validation ───────────────────────────────────────────
+
+VER_REF_ISSUES=0
+
+check_ver_refs() {
+    # Check 1: Ver-ref targets exist (exclude .syskit/ reference docs which contain examples)
+    local files
+    files=$(git ls-files --cached --others --exclude-standard 2>/dev/null | grep -v '^\.syskit/' | xargs grep -lI "Ver-ref:" 2>/dev/null || true)
+
+    if [ -n "$files" ]; then
+        local src_file line ver_basename
+        for src_file in $files; do
+            while IFS= read -r line; do
+                ver_basename=$(echo "$line" | sed -n 's/.*Ver-ref:[[:space:]]*\([^ ]*\.md\).*/\1/p')
+                [ -z "$ver_basename" ] && continue
+                if [ ! -f "$VER_DIR/$ver_basename" ]; then
+                    echo "BROKEN   $src_file Ver-ref to $ver_basename — file not found"
+                    VER_REF_ISSUES=$((VER_REF_ISSUES + 1))
+                fi
+            done < <(grep "Ver-ref:" "$src_file")
+        done
+    fi
+
+    # Check 2: Test files listed in ## Test Implementation exist
+    for f in "$VER_DIR"/ver_[0-9]*.md; do
+        [ -f "$f" ] || continue
+        local base
+        base=$(basename "$f")
+        [[ "$base" == *_000_template* ]] && continue
+        local test_files
+        test_files=$(awk '
+            BEGIN { found = 0 }
+            $0 == "## Test Implementation" { found = 1; next }
+            found && /^#/ { match($0, /^#+/); if (RLENGTH <= 2) exit }
+            found && /^- `[^`]+`/ {
+                match($0, /`[^`]+`/)
+                path = substr($0, RSTART+1, RLENGTH-2)
+                if (path !~ /[<>]/) print path
+            }
+        ' "$f")
+        while IFS= read -r tpath; do
+            [ -z "$tpath" ] && continue
+            if [ ! -f "$PROJECT_ROOT/$tpath" ]; then
+                echo "BROKEN   $base lists test file $tpath in ## Test Implementation — file not found"
+                VER_REF_ISSUES=$((VER_REF_ISSUES + 1))
+            fi
+        done <<< "$test_files"
+    done
+}
+
 # ─── Main ─────────────────────────────────────────────────────────
 
 build_id_map
@@ -107,11 +157,12 @@ parse_forward_refs
 check_broken
 check_direction
 check_orphans
+check_ver_refs
 
 echo ""
-TOTAL=$((BROKEN + DIRECTION + ORPHANS))
+TOTAL=$((BROKEN + DIRECTION + ORPHANS + VER_REF_ISSUES))
 
-echo "Summary: ${BROKEN} broken, ${DIRECTION} direction violations, ${ORPHANS} orphans"
+echo "Summary: ${BROKEN} broken, ${DIRECTION} direction violations, ${ORPHANS} orphans, ${VER_REF_ISSUES} ver-ref issues"
 
 if [ "$TOTAL" -eq 0 ]; then
     echo "All cross-references are consistent."

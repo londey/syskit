@@ -74,13 +74,7 @@ Run these scripts to verify consistency:
 
 If trace-sync reports issues, report them to the user for manual correction.
 
-For each design unit referenced by the task, update Spec-ref hashes:
-
-```bash
-.syskit/scripts/impl-stamp.sh UNIT-NNN
-```
-
-Then verify implementation freshness:
+Verify Spec-ref consistency (missing / orphan / untracked):
 
 ```bash
 .syskit/scripts/impl-check.sh

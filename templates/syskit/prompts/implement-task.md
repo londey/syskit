@@ -44,14 +44,13 @@ Follow the task's implementation steps:
 4. If the task references VER-NNN documents and implementation changes affect verified behavior, update the verification document's Procedure and Expected Results sections to match
 5. Ensure Spec-ref traceability for every design unit you implement:
    a. For each UNIT-NNN referenced by this task, read the unit document's `## Implementation` section to find the list of source files.
-   b. For every file listed there — whether you created it or it already existed — verify it contains a Spec-ref comment for that unit. If it does not, add a placeholder:
+   b. For every file listed there — whether you created it or it already existed — verify it contains a Spec-ref comment for that unit. If it does not, add one:
       ```
-      // Spec-ref: unit_NNN_name.md `0000000000000000` 1970-01-01
+      // Spec-ref: unit_NNN_name.md
       ```
       Use the comment prefix appropriate for the file's language (`//` for C/Verilog/SystemVerilog, `#` for Python/Bash/Makefile, `--` for VHDL/SQL/Lua, etc.). Place it near the top of the file, after any file-level header comment or license block.
    c. If you created or modified a file that implements a unit but that file is NOT listed in the unit's `## Implementation` section, add it there in the format: `` - `path/to/file`: <brief description> ``
    d. If you used a different filename than what the `## Implementation` section lists, update the `## Implementation` entry to match the actual filename.
-   e. Do not edit Spec-ref hash values manually — `impl-stamp.sh` will set them after you finish.
 
 ### 4. Verify
 

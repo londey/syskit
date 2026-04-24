@@ -8,7 +8,7 @@ Each design unit describes a cohesive piece of the system: its purpose, the requ
 
 - **Naming:** `unit_NNN_<name>.md` (children use dot notation: `unit_NNN.NN_<name>.md`)
 - **Create new:** `.syskit/scripts/new-unit.sh <name>` (add `--parent UNIT-NNN` for a child)
-- **Traceability:** Source files link back via `Spec-ref` comments; run `.syskit/scripts/impl-stamp.sh UNIT-NNN` to keep hashes current.
+- **Traceability:** Source files link back via `Spec-ref` comments. Run `.syskit/scripts/impl-check.sh` to verify bidirectional consistency between `## Implementation` and source-file Spec-refs.
 
 See `.syskit/AGENTS.md` §File Numbering and §Cross-References for shared rules.
 

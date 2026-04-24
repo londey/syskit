@@ -1,9 +1,9 @@
 #!/bin/bash
-# Check implementation freshness via Spec-ref comment hashes
+# Check Spec-ref consistency between source files and unit ## Implementation sections
 # Usage: impl-check.sh [UNIT-NNN | unit_NNN_name.md]
 #   No argument: full scan, generates .syskit/impl-status.md
 #   With argument: filter to one unit, stdout only
-# Exit codes: 0 = all current, 1 = stale or issues found
+# Exit codes: 0 = no issues, 1 = missing/orphan/untracked issues found
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,24 +20,14 @@ if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
     exit 1
 fi
 
-# ─── Cross-platform hash command ─────────────────────────────────
-
-if command -v sha256sum &> /dev/null; then
-    hash_cmd() { sha256sum "$1" | cut -c1-16; }
-else
-    hash_cmd() { shasum -a 256 "$1" | cut -c1-16; }
-fi
-
 # ─── Resolve UNIT filter ─────────────────────────────────────────
 
 FILTER_BASENAME=""
 
 if [ -n "$FILTER" ]; then
-    # Try direct basename match
     if [ -f "$UNIT_DIR/$FILTER" ]; then
         FILTER_BASENAME="$FILTER"
     else
-        # Extract 3-digit number from UNIT-NNN, unit-NNN, etc.
         num=$(echo "$FILTER" | grep -oE '[0-9]{3}' | head -1)
         if [ -z "$num" ]; then
             echo "Error: cannot parse unit number from '$FILTER'" >&2
@@ -55,39 +45,30 @@ fi
 
 # ─── Scan for Spec-ref lines ─────────────────────────────────────
 
-# source_file -> unit_basename:hash:date (one entry per Spec-ref line)
-declare -A SPEC_REFS        # "src_file|unit_basename" -> "hash date"
+declare -A SPEC_REFS        # "src_file|unit_basename" -> 1 (presence marker)
 declare -a REF_KEYS=()      # ordered list of "src_file|unit_basename" keys
 
 scan_spec_refs() {
     local files
-    files=$(git ls-files --cached --others --exclude-standard 2>/dev/null | xargs grep -lI "Spec-ref:" 2>/dev/null || true)
+    files=$(git ls-files --cached --others --exclude-standard 2>/dev/null | grep -v '^\.syskit/' | xargs grep -lI "Spec-ref:" 2>/dev/null || true)
 
     [ -z "$files" ] && return
 
-    local src_file line unit_basename ref_hash ref_date
+    local src_file line unit_basename
     for src_file in $files; do
         while IFS= read -r line; do
-            # Extract unit filename
-            unit_basename=$(echo "$line" | sed -n 's/.*Spec-ref:[[:space:]]*\([^ ]*\.md\).*/\1/p')
+            unit_basename=$(echo "$line" | sed -n 's/.*Spec-ref:[[:space:]]*\([^ `]*\.md\).*/\1/p')
             [ -z "$unit_basename" ] && continue
 
-            # Apply filter
             if [ -n "$FILTER_BASENAME" ] && [ "$unit_basename" != "$FILTER_BASENAME" ]; then
                 continue
             fi
 
-            # Extract hash (16 hex chars between backticks)
-            ref_hash=$(echo "$line" | sed -n 's/.*`\([0-9a-f]\{16\}\)`.*/\1/p')
-            [ -z "$ref_hash" ] && continue
-
-            # Extract date
-            ref_date=$(echo "$line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1)
-            [ -z "$ref_date" ] && ref_date="unknown"
-
             local key="${src_file}|${unit_basename}"
-            SPEC_REFS["$key"]="$ref_hash $ref_date"
-            REF_KEYS+=("$key")
+            if [ -z "${SPEC_REFS[$key]:-}" ]; then
+                SPEC_REFS["$key"]=1
+                REF_KEYS+=("$key")
+            fi
         done < <(grep "Spec-ref:" "$src_file")
     done
 }
@@ -103,7 +84,6 @@ parse_impl_sections() {
         base=$(basename "$f")
         [[ "$base" == *_000_template* ]] && continue
 
-        # Apply filter
         if [ -n "$FILTER_BASENAME" ] && [ "$base" != "$FILTER_BASENAME" ]; then
             continue
         fi
@@ -119,43 +99,47 @@ parse_impl_sections() {
             }
         ' "$f")
 
-        [ -n "$impl_files" ] && UNIT_IMPL_FILES["$base"]="$impl_files"
+        UNIT_IMPL_FILES["$base"]="$impl_files"
     done
 }
 
-# ─── Compare hashes ──────────────────────────────────────────────
+# ─── Classify refs: missing unit vs. orphan vs. ok ────────────────
 
-CURRENT_COUNT=0
-STALE_COUNT=0
 MISSING_COUNT=0
+ORPHAN_COUNT=0
 
-declare -a RESULT_LINES=()  # "status|src_file|unit_basename|ref_hash|current_hash|ref_date"
+declare -a RESULT_LINES=()  # "status|src_file|unit_basename"
 
-compare_hashes() {
-    local key src_file unit_basename ref_hash ref_date current_hash unit_path status
+classify_refs() {
+    local key src_file unit_basename unit_path impl_list listed status
     for key in "${REF_KEYS[@]}"; do
         src_file="${key%%|*}"
         unit_basename="${key##*|}"
-        ref_hash=$(echo "${SPEC_REFS[$key]}" | cut -d' ' -f1)
-        ref_date=$(echo "${SPEC_REFS[$key]}" | cut -d' ' -f2)
-
         unit_path="$UNIT_DIR/$unit_basename"
+
         if [ ! -f "$unit_path" ]; then
             status="missing"
-            current_hash="n/a"
             MISSING_COUNT=$((MISSING_COUNT + 1))
         else
-            current_hash=$(hash_cmd "$unit_path")
-            if [ "$ref_hash" = "$current_hash" ]; then
-                status="current"
-                CURRENT_COUNT=$((CURRENT_COUNT + 1))
+            impl_list="${UNIT_IMPL_FILES[$unit_basename]:-}"
+            listed=false
+            while IFS= read -r impl_path; do
+                [ -z "$impl_path" ] && continue
+                if [ "$impl_path" = "$src_file" ]; then
+                    listed=true
+                    break
+                fi
+            done <<< "$impl_list"
+
+            if $listed; then
+                continue
             else
-                status="stale"
-                STALE_COUNT=$((STALE_COUNT + 1))
+                status="orphan"
+                ORPHAN_COUNT=$((ORPHAN_COUNT + 1))
             fi
         fi
 
-        RESULT_LINES+=("${status}|${src_file}|${unit_basename}|${ref_hash}|${current_hash}|${ref_date}")
+        RESULT_LINES+=("${status}|${src_file}|${unit_basename}")
     done
 }
 
@@ -166,11 +150,12 @@ UNTRACKED_COUNT=0
 declare -a UNTRACKED_LINES=()  # "unit_basename|impl_files"
 
 find_untracked() {
-    local unit_basename impl_list has_any_ref impl_path key
+    local unit_basename impl_list has_any_ref impl_path key display_files
     for unit_basename in "${!UNIT_IMPL_FILES[@]}"; do
         impl_list="${UNIT_IMPL_FILES[$unit_basename]}"
-        has_any_ref=false
+        [ -z "$impl_list" ] && continue
 
+        has_any_ref=false
         while IFS= read -r impl_path; do
             [ -z "$impl_path" ] && continue
             key="${impl_path}|${unit_basename}"
@@ -181,8 +166,6 @@ find_untracked() {
         done <<< "$impl_list"
 
         if ! $has_any_ref; then
-            # Collapse newlines to comma-separated for display
-            local display_files
             display_files=$(echo "$impl_list" | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g')
             UNTRACKED_LINES+=("${unit_basename}|${display_files}")
             UNTRACKED_COUNT=$((UNTRACKED_COUNT + 1))
@@ -205,26 +188,23 @@ generate_report() {
         echo ""
         echo "## Summary"
         echo ""
-        echo "- Current: $CURRENT_COUNT"
-        echo "- Stale: $STALE_COUNT"
         echo "- Missing unit: $MISSING_COUNT"
+        echo "- Orphan refs: $ORPHAN_COUNT"
         echo "- Untracked units: $UNTRACKED_COUNT"
         echo ""
 
         if [ ${#RESULT_LINES[@]} -gt 0 ]; then
-            echo "## Spec-ref Status"
+            echo "## Spec-ref Issues"
             echo ""
-            echo "| Source File | Unit | Ref Hash | Current Hash | Status | Sync Date |"
-            echo "|------------|------|----------|--------------|--------|-----------|"
+            echo "| Source File | Unit | Status |"
+            echo "|-------------|------|--------|"
 
-            local entry status src_file unit_basename ref_hash current_hash ref_date
+            local entry status src_file unit_basename unit_num unit_id
             for entry in "${RESULT_LINES[@]}"; do
-                IFS='|' read -r status src_file unit_basename ref_hash current_hash ref_date <<< "$entry"
-                # Derive UNIT-NNN from basename
-                local unit_num
+                IFS='|' read -r status src_file unit_basename <<< "$entry"
                 unit_num=$(echo "$unit_basename" | sed -n 's/unit_\([0-9][0-9][0-9]\)_.*/\1/p')
-                local unit_id="UNIT-${unit_num}"
-                echo "| \`$src_file\` | $unit_id | \`$ref_hash\` | \`$current_hash\` | $status | $ref_date |"
+                unit_id="UNIT-${unit_num}"
+                echo "| \`$src_file\` | $unit_id | $status |"
             done
             echo ""
         fi
@@ -258,11 +238,10 @@ print_summary() {
     local entry status src_file unit_basename
 
     for entry in "${RESULT_LINES[@]}"; do
-        IFS='|' read -r status src_file unit_basename _ _ _ <<< "$entry"
+        IFS='|' read -r status src_file unit_basename <<< "$entry"
         case "$status" in
-            current) echo "✓ current — $src_file" ;;
-            stale)   echo "⚠ stale   — $src_file" ;;
             missing) echo "✗ missing — $src_file (references $unit_basename)" ;;
+            orphan)  echo "⚠ orphan  — $src_file (Spec-ref to $unit_basename, not in ## Implementation)" ;;
         esac
     done
 
@@ -276,7 +255,7 @@ print_summary() {
 
 scan_spec_refs
 parse_impl_sections
-compare_hashes
+classify_refs
 find_untracked
 
 if [ -z "$FILTER" ]; then
@@ -288,14 +267,15 @@ else
 fi
 
 echo ""
-TOTAL=$((STALE_COUNT + MISSING_COUNT + UNTRACKED_COUNT))
+TOTAL=$((MISSING_COUNT + ORPHAN_COUNT + UNTRACKED_COUNT))
+TOTAL_REFS=${#REF_KEYS[@]}
 
-if [ "$TOTAL" -eq 0 ] && [ $((CURRENT_COUNT + UNTRACKED_COUNT)) -eq 0 ]; then
+if [ "$TOTAL" -eq 0 ] && [ "$TOTAL_REFS" -eq 0 ] && [ "$UNTRACKED_COUNT" -eq 0 ]; then
     echo "No Spec-ref lines found."
 elif [ "$TOTAL" -eq 0 ]; then
-    echo "All implementations are current."
+    echo "All Spec-refs consistent."
 else
-    echo "Summary: $CURRENT_COUNT current, $STALE_COUNT stale, $MISSING_COUNT missing, $UNTRACKED_COUNT untracked"
+    echo "Summary: $MISSING_COUNT missing, $ORPHAN_COUNT orphan, $UNTRACKED_COUNT untracked"
 fi
 
 exit $((TOTAL > 0 ? 1 : 0))

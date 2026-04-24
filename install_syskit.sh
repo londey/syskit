@@ -145,13 +145,11 @@ After spec changes are approved:
 1. Delegate implementation to a subagent — subagent reads the task file and all referenced files, makes changes, verifies, returns a summary
 2. After each task, run post-implementation scripts to verify consistency
 3. Run `.syskit/scripts/trace-sync.sh` to validate forward references
-4. Run `.syskit/scripts/impl-stamp.sh UNIT-NNN` for each modified unit to update Spec-ref hashes
-5. Run `.syskit/scripts/impl-check.sh` to verify implementation freshness
-6. Run `.syskit/scripts/ver-stamp.sh VER-NNN` for each modified VER to update Ver-ref hashes
-7. Run `.syskit/scripts/ver-check.sh` to verify test freshness
-8. After doc changes, run `.syskit/scripts/arch-update.sh` to refresh ARCHITECTURE.md
-9. After doc changes, run `.syskit/scripts/manifest.sh` to update the manifest
-10. Run `.syskit/scripts/template-check.sh` to verify documents conform to current templates
+4. Run `.syskit/scripts/impl-check.sh` to verify Spec-ref consistency (missing / orphan / untracked)
+5. Run `.syskit/scripts/ver-check.sh` to verify Ver-ref consistency (missing / orphan / untracked)
+6. After doc changes, run `.syskit/scripts/arch-update.sh` to refresh ARCHITECTURE.md
+7. After doc changes, run `.syskit/scripts/manifest.sh` to update the manifest
+8. Run `.syskit/scripts/template-check.sh` to verify documents conform to current templates
 
 ### Context Budget Management
 
@@ -721,11 +719,11 @@ chmod +x ".syskit/scripts/find-task.sh"
 info "Creating .syskit/scripts/impl-check.sh"
 cat > ".syskit/scripts/impl-check.sh" << '__SYSKIT_TEMPLATE_END__'
 #!/bin/bash
-# Check implementation freshness via Spec-ref comment hashes
+# Check Spec-ref consistency between source files and unit ## Implementation sections
 # Usage: impl-check.sh [UNIT-NNN | unit_NNN_name.md]
 #   No argument: full scan, generates .syskit/impl-status.md
 #   With argument: filter to one unit, stdout only
-# Exit codes: 0 = all current, 1 = stale or issues found
+# Exit codes: 0 = no issues, 1 = missing/orphan/untracked issues found
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -742,24 +740,14 @@ if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
     exit 1
 fi
 
-# ─── Cross-platform hash command ─────────────────────────────────
-
-if command -v sha256sum &> /dev/null; then
-    hash_cmd() { sha256sum "$1" | cut -c1-16; }
-else
-    hash_cmd() { shasum -a 256 "$1" | cut -c1-16; }
-fi
-
 # ─── Resolve UNIT filter ─────────────────────────────────────────
 
 FILTER_BASENAME=""
 
 if [ -n "$FILTER" ]; then
-    # Try direct basename match
     if [ -f "$UNIT_DIR/$FILTER" ]; then
         FILTER_BASENAME="$FILTER"
     else
-        # Extract 3-digit number from UNIT-NNN, unit-NNN, etc.
         num=$(echo "$FILTER" | grep -oE '[0-9]{3}' | head -1)
         if [ -z "$num" ]; then
             echo "Error: cannot parse unit number from '$FILTER'" >&2
@@ -777,39 +765,30 @@ fi
 
 # ─── Scan for Spec-ref lines ─────────────────────────────────────
 
-# source_file -> unit_basename:hash:date (one entry per Spec-ref line)
-declare -A SPEC_REFS        # "src_file|unit_basename" -> "hash date"
+declare -A SPEC_REFS        # "src_file|unit_basename" -> 1 (presence marker)
 declare -a REF_KEYS=()      # ordered list of "src_file|unit_basename" keys
 
 scan_spec_refs() {
     local files
-    files=$(git ls-files --cached --others --exclude-standard 2>/dev/null | xargs grep -lI "Spec-ref:" 2>/dev/null || true)
+    files=$(git ls-files --cached --others --exclude-standard 2>/dev/null | grep -v '^\.syskit/' | xargs grep -lI "Spec-ref:" 2>/dev/null || true)
 
     [ -z "$files" ] && return
 
-    local src_file line unit_basename ref_hash ref_date
+    local src_file line unit_basename
     for src_file in $files; do
         while IFS= read -r line; do
-            # Extract unit filename
-            unit_basename=$(echo "$line" | sed -n 's/.*Spec-ref:[[:space:]]*\([^ ]*\.md\).*/\1/p')
+            unit_basename=$(echo "$line" | sed -n 's/.*Spec-ref:[[:space:]]*\([^ `]*\.md\).*/\1/p')
             [ -z "$unit_basename" ] && continue
 
-            # Apply filter
             if [ -n "$FILTER_BASENAME" ] && [ "$unit_basename" != "$FILTER_BASENAME" ]; then
                 continue
             fi
 
-            # Extract hash (16 hex chars between backticks)
-            ref_hash=$(echo "$line" | sed -n 's/.*`\([0-9a-f]\{16\}\)`.*/\1/p')
-            [ -z "$ref_hash" ] && continue
-
-            # Extract date
-            ref_date=$(echo "$line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1)
-            [ -z "$ref_date" ] && ref_date="unknown"
-
             local key="${src_file}|${unit_basename}"
-            SPEC_REFS["$key"]="$ref_hash $ref_date"
-            REF_KEYS+=("$key")
+            if [ -z "${SPEC_REFS[$key]:-}" ]; then
+                SPEC_REFS["$key"]=1
+                REF_KEYS+=("$key")
+            fi
         done < <(grep "Spec-ref:" "$src_file")
     done
 }
@@ -825,7 +804,6 @@ parse_impl_sections() {
         base=$(basename "$f")
         [[ "$base" == *_000_template* ]] && continue
 
-        # Apply filter
         if [ -n "$FILTER_BASENAME" ] && [ "$base" != "$FILTER_BASENAME" ]; then
             continue
         fi
@@ -841,43 +819,47 @@ parse_impl_sections() {
             }
         ' "$f")
 
-        [ -n "$impl_files" ] && UNIT_IMPL_FILES["$base"]="$impl_files"
+        UNIT_IMPL_FILES["$base"]="$impl_files"
     done
 }
 
-# ─── Compare hashes ──────────────────────────────────────────────
+# ─── Classify refs: missing unit vs. orphan vs. ok ────────────────
 
-CURRENT_COUNT=0
-STALE_COUNT=0
 MISSING_COUNT=0
+ORPHAN_COUNT=0
 
-declare -a RESULT_LINES=()  # "status|src_file|unit_basename|ref_hash|current_hash|ref_date"
+declare -a RESULT_LINES=()  # "status|src_file|unit_basename"
 
-compare_hashes() {
-    local key src_file unit_basename ref_hash ref_date current_hash unit_path status
+classify_refs() {
+    local key src_file unit_basename unit_path impl_list listed status
     for key in "${REF_KEYS[@]}"; do
         src_file="${key%%|*}"
         unit_basename="${key##*|}"
-        ref_hash=$(echo "${SPEC_REFS[$key]}" | cut -d' ' -f1)
-        ref_date=$(echo "${SPEC_REFS[$key]}" | cut -d' ' -f2)
-
         unit_path="$UNIT_DIR/$unit_basename"
+
         if [ ! -f "$unit_path" ]; then
             status="missing"
-            current_hash="n/a"
             MISSING_COUNT=$((MISSING_COUNT + 1))
         else
-            current_hash=$(hash_cmd "$unit_path")
-            if [ "$ref_hash" = "$current_hash" ]; then
-                status="current"
-                CURRENT_COUNT=$((CURRENT_COUNT + 1))
+            impl_list="${UNIT_IMPL_FILES[$unit_basename]:-}"
+            listed=false
+            while IFS= read -r impl_path; do
+                [ -z "$impl_path" ] && continue
+                if [ "$impl_path" = "$src_file" ]; then
+                    listed=true
+                    break
+                fi
+            done <<< "$impl_list"
+
+            if $listed; then
+                continue
             else
-                status="stale"
-                STALE_COUNT=$((STALE_COUNT + 1))
+                status="orphan"
+                ORPHAN_COUNT=$((ORPHAN_COUNT + 1))
             fi
         fi
 
-        RESULT_LINES+=("${status}|${src_file}|${unit_basename}|${ref_hash}|${current_hash}|${ref_date}")
+        RESULT_LINES+=("${status}|${src_file}|${unit_basename}")
     done
 }
 
@@ -888,11 +870,12 @@ UNTRACKED_COUNT=0
 declare -a UNTRACKED_LINES=()  # "unit_basename|impl_files"
 
 find_untracked() {
-    local unit_basename impl_list has_any_ref impl_path key
+    local unit_basename impl_list has_any_ref impl_path key display_files
     for unit_basename in "${!UNIT_IMPL_FILES[@]}"; do
         impl_list="${UNIT_IMPL_FILES[$unit_basename]}"
-        has_any_ref=false
+        [ -z "$impl_list" ] && continue
 
+        has_any_ref=false
         while IFS= read -r impl_path; do
             [ -z "$impl_path" ] && continue
             key="${impl_path}|${unit_basename}"
@@ -903,8 +886,6 @@ find_untracked() {
         done <<< "$impl_list"
 
         if ! $has_any_ref; then
-            # Collapse newlines to comma-separated for display
-            local display_files
             display_files=$(echo "$impl_list" | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g')
             UNTRACKED_LINES+=("${unit_basename}|${display_files}")
             UNTRACKED_COUNT=$((UNTRACKED_COUNT + 1))
@@ -927,26 +908,23 @@ generate_report() {
         echo ""
         echo "## Summary"
         echo ""
-        echo "- Current: $CURRENT_COUNT"
-        echo "- Stale: $STALE_COUNT"
         echo "- Missing unit: $MISSING_COUNT"
+        echo "- Orphan refs: $ORPHAN_COUNT"
         echo "- Untracked units: $UNTRACKED_COUNT"
         echo ""
 
         if [ ${#RESULT_LINES[@]} -gt 0 ]; then
-            echo "## Spec-ref Status"
+            echo "## Spec-ref Issues"
             echo ""
-            echo "| Source File | Unit | Ref Hash | Current Hash | Status | Sync Date |"
-            echo "|------------|------|----------|--------------|--------|-----------|"
+            echo "| Source File | Unit | Status |"
+            echo "|-------------|------|--------|"
 
-            local entry status src_file unit_basename ref_hash current_hash ref_date
+            local entry status src_file unit_basename unit_num unit_id
             for entry in "${RESULT_LINES[@]}"; do
-                IFS='|' read -r status src_file unit_basename ref_hash current_hash ref_date <<< "$entry"
-                # Derive UNIT-NNN from basename
-                local unit_num
+                IFS='|' read -r status src_file unit_basename <<< "$entry"
                 unit_num=$(echo "$unit_basename" | sed -n 's/unit_\([0-9][0-9][0-9]\)_.*/\1/p')
-                local unit_id="UNIT-${unit_num}"
-                echo "| \`$src_file\` | $unit_id | \`$ref_hash\` | \`$current_hash\` | $status | $ref_date |"
+                unit_id="UNIT-${unit_num}"
+                echo "| \`$src_file\` | $unit_id | $status |"
             done
             echo ""
         fi
@@ -980,11 +958,10 @@ print_summary() {
     local entry status src_file unit_basename
 
     for entry in "${RESULT_LINES[@]}"; do
-        IFS='|' read -r status src_file unit_basename _ _ _ <<< "$entry"
+        IFS='|' read -r status src_file unit_basename <<< "$entry"
         case "$status" in
-            current) echo "✓ current — $src_file" ;;
-            stale)   echo "⚠ stale   — $src_file" ;;
             missing) echo "✗ missing — $src_file (references $unit_basename)" ;;
+            orphan)  echo "⚠ orphan  — $src_file (Spec-ref to $unit_basename, not in ## Implementation)" ;;
         esac
     done
 
@@ -998,7 +975,7 @@ print_summary() {
 
 scan_spec_refs
 parse_impl_sections
-compare_hashes
+classify_refs
 find_untracked
 
 if [ -z "$FILTER" ]; then
@@ -1010,189 +987,20 @@ else
 fi
 
 echo ""
-TOTAL=$((STALE_COUNT + MISSING_COUNT + UNTRACKED_COUNT))
+TOTAL=$((MISSING_COUNT + ORPHAN_COUNT + UNTRACKED_COUNT))
+TOTAL_REFS=${#REF_KEYS[@]}
 
-if [ "$TOTAL" -eq 0 ] && [ $((CURRENT_COUNT + UNTRACKED_COUNT)) -eq 0 ]; then
+if [ "$TOTAL" -eq 0 ] && [ "$TOTAL_REFS" -eq 0 ] && [ "$UNTRACKED_COUNT" -eq 0 ]; then
     echo "No Spec-ref lines found."
 elif [ "$TOTAL" -eq 0 ]; then
-    echo "All implementations are current."
+    echo "All Spec-refs consistent."
 else
-    echo "Summary: $CURRENT_COUNT current, $STALE_COUNT stale, $MISSING_COUNT missing, $UNTRACKED_COUNT untracked"
+    echo "Summary: $MISSING_COUNT missing, $ORPHAN_COUNT orphan, $UNTRACKED_COUNT untracked"
 fi
 
 exit $((TOTAL > 0 ? 1 : 0))
 __SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/impl-check.sh"
-
-# --- .syskit/scripts/impl-stamp.sh ---
-info "Creating .syskit/scripts/impl-stamp.sh"
-cat > ".syskit/scripts/impl-stamp.sh" << '__SYSKIT_TEMPLATE_END__'
-#!/bin/bash
-# Update Spec-ref hashes in implementation files for a given design unit
-# Usage: impl-stamp.sh <UNIT-NNN | unit_NNN_name.md>
-# Exit codes: 0 = all updated, 1 = warnings
-set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-UNIT_DIR="$PROJECT_ROOT/doc/design"
-
-UNIT_ARG="${1:-}"
-
-if [ -z "$UNIT_ARG" ]; then
-    echo "Usage: impl-stamp.sh <UNIT-NNN | unit_NNN_name.md>" >&2
-    exit 1
-fi
-
-cd "$PROJECT_ROOT"
-
-# Require bash 4+ for associative arrays
-if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
-    echo "Error: bash 4+ required (found ${BASH_VERSION})" >&2
-    exit 1
-fi
-
-# ─── Cross-platform hash command ─────────────────────────────────
-
-if command -v sha256sum &> /dev/null; then
-    hash_cmd() { sha256sum "$1" | cut -c1-16; }
-else
-    hash_cmd() { shasum -a 256 "$1" | cut -c1-16; }
-fi
-
-# ─── Cross-platform sed -i ───────────────────────────────────────
-
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed_inplace() { sed -i '' "$@"; }
-else
-    sed_inplace() { sed -i "$@"; }
-fi
-
-# ─── Resolve unit argument ───────────────────────────────────────
-
-resolve_unit() {
-    local arg="$1"
-
-    # Try direct basename match
-    if [ -f "$UNIT_DIR/$arg" ]; then
-        echo "$UNIT_DIR/$arg"
-        return 0
-    fi
-
-    # Extract 3-digit number from UNIT-NNN, unit-NNN, etc.
-    local num
-    num=$(echo "$arg" | grep -oE '[0-9]{3}' | head -1)
-    if [ -z "$num" ]; then
-        echo "Error: cannot parse unit number from '$arg'" >&2
-        return 1
-    fi
-
-    local matches=("$UNIT_DIR"/unit_${num}_*.md)
-    if [ -f "${matches[0]}" ]; then
-        echo "${matches[0]}"
-        return 0
-    fi
-
-    echo "Error: no unit file found for '$arg'" >&2
-    return 1
-}
-
-UNIT_FILE=$(resolve_unit "$UNIT_ARG")
-UNIT_BASENAME=$(basename "$UNIT_FILE")
-
-# ─── Compute current hash ────────────────────────────────────────
-
-CURRENT_HASH=$(hash_cmd "$UNIT_FILE")
-TODAY=$(date +%Y-%m-%d)
-
-echo "impl-stamp: $UNIT_BASENAME"
-echo "Hash: \`$CURRENT_HASH\` ($TODAY)"
-echo ""
-
-# ─── Extract implementation file paths from ## Implementation ─────
-
-IMPL_FILES=$(awk '
-    BEGIN { found = 0 }
-    $0 == "## Implementation" { found = 1; next }
-    found && /^#/ { match($0, /^#+/); if (RLENGTH <= 2) exit }
-    found && /^- `[^`]+`/ {
-        match($0, /`[^`]+`/)
-        path = substr($0, RSTART+1, RLENGTH-2)
-        if (path !~ /[<>]/) print path
-    }
-' "$UNIT_FILE")
-
-if [ -z "$IMPL_FILES" ]; then
-    echo "No implementation files listed in ## Implementation section."
-    exit 0
-fi
-
-UPDATED=0
-WARNED=0
-
-# ─── Build set of listed files for orphan check ──────────────────
-
-declare -A LISTED_FILES
-
-# ─── Process each implementation file ─────────────────────────────
-
-while IFS= read -r impl_path; do
-    [ -z "$impl_path" ] && continue
-    LISTED_FILES["$impl_path"]=1
-
-    if [ ! -f "$PROJECT_ROOT/$impl_path" ]; then
-        echo "⚠ not found  — $impl_path"
-        WARNED=$((WARNED + 1))
-        continue
-    fi
-
-    if grep -q "Spec-ref:.*${UNIT_BASENAME}" "$PROJECT_ROOT/$impl_path"; then
-        # Extract existing hash to avoid unnecessary date-only changes
-        EXISTING_HASH=$(grep "Spec-ref:.*${UNIT_BASENAME}" "$PROJECT_ROOT/$impl_path" | grep -oE '\`[0-9a-f]{16}\`' | tr -d '`' | head -1)
-        if [ "$EXISTING_HASH" = "$CURRENT_HASH" ]; then
-            echo "· current    — $impl_path"
-        else
-            # Update hash and date, preserving comment prefix
-            sed_inplace "s|\(Spec-ref:[[:space:]]*${UNIT_BASENAME}[[:space:]]*\)\`[0-9a-f]\{16\}\`[[:space:]]*[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}|\1\`${CURRENT_HASH}\` ${TODAY}|" "$PROJECT_ROOT/$impl_path"
-            echo "✓ updated    — $impl_path"
-            UPDATED=$((UPDATED + 1))
-        fi
-    else
-        echo "⚠ no Spec-ref — $impl_path"
-        WARNED=$((WARNED + 1))
-    fi
-done <<< "$IMPL_FILES"
-
-# ─── Scan for orphaned references ─────────────────────────────────
-
-echo ""
-
-ORPHAN_FILES=$(git ls-files --cached --others --exclude-standard 2>/dev/null | xargs grep -lI "Spec-ref:.*${UNIT_BASENAME}" 2>/dev/null || true)
-
-ORPHAN_FOUND=0
-if [ -n "$ORPHAN_FILES" ]; then
-    while IFS= read -r orphan; do
-        [ -z "$orphan" ] && continue
-        if [ -z "${LISTED_FILES[$orphan]:-}" ]; then
-            echo "⚠ orphan     — $orphan (has Spec-ref to $UNIT_BASENAME but not in ## Implementation)"
-            WARNED=$((WARNED + 1))
-            ORPHAN_FOUND=$((ORPHAN_FOUND + 1))
-        fi
-    done <<< "$ORPHAN_FILES"
-fi
-
-if [ "$ORPHAN_FOUND" -eq 0 ]; then
-    echo "No orphaned references found."
-fi
-
-# ─── Summary ──────────────────────────────────────────────────────
-
-echo ""
-echo "Summary: $UPDATED updated, $WARNED warnings"
-
-exit $((WARNED > 0 ? 1 : 0))
-__SYSKIT_TEMPLATE_END__
-chmod +x ".syskit/scripts/impl-stamp.sh"
 
 # --- .syskit/scripts/manifest-check.sh ---
 info "Creating .syskit/scripts/manifest-check.sh"
@@ -3245,11 +3053,11 @@ chmod +x ".syskit/scripts/trace.sh"
 info "Creating .syskit/scripts/ver-check.sh"
 cat > ".syskit/scripts/ver-check.sh" << '__SYSKIT_TEMPLATE_END__'
 #!/bin/bash
-# Check verification test freshness via Ver-ref comment hashes
+# Check Ver-ref consistency between test files and VER ## Test Implementation sections
 # Usage: ver-check.sh [VER-NNN | ver_NNN_name.md]
 #   No argument: full scan, generates .syskit/ver-status.md
 #   With argument: filter to one VER, stdout only
-# Exit codes: 0 = all current, 1 = stale or issues found
+# Exit codes: 0 = no issues, 1 = missing/orphan/untracked issues found
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -3266,29 +3074,18 @@ if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
     exit 1
 fi
 
-# ─── Cross-platform hash command ─────────────────────────────────
-
-if command -v sha256sum &> /dev/null; then
-    hash_cmd() { sha256sum "$1" | cut -c1-16; }
-else
-    hash_cmd() { shasum -a 256 "$1" | cut -c1-16; }
-fi
-
 # ─── Resolve VER filter ──────────────────────────────────────────
 
 FILTER_BASENAME=""
 
 if [ -n "$FILTER" ]; then
-    # Try direct basename match
     if [ -f "$VER_DIR/$FILTER" ]; then
         FILTER_BASENAME="$FILTER"
     else
-        # Check for hierarchical ID (VER-NNN.NN)
         if echo "$FILTER" | grep -qE '[0-9]{3}\.[0-9]{2}'; then
             num=$(echo "$FILTER" | grep -oE '[0-9]{3}\.[0-9]{2}' | head -1)
             matches=("$VER_DIR"/ver_${num}_*.md)
         else
-            # Extract 3-digit number from VER-NNN, ver-NNN, etc.
             num=$(echo "$FILTER" | grep -oE '[0-9]{3}' | head -1)
             if [ -z "$num" ]; then
                 echo "Error: cannot parse VER number from '$FILTER'" >&2
@@ -3307,8 +3104,7 @@ fi
 
 # ─── Scan for Ver-ref lines ──────────────────────────────────────
 
-# source_file -> ver_basename:hash:date (one entry per Ver-ref line)
-declare -A VER_REFS        # "src_file|ver_basename" -> "hash date"
+declare -A VER_REFS        # "src_file|ver_basename" -> 1 (presence marker)
 declare -a REF_KEYS=()     # ordered list of "src_file|ver_basename" keys
 
 scan_ver_refs() {
@@ -3317,29 +3113,21 @@ scan_ver_refs() {
 
     [ -z "$files" ] && return
 
-    local src_file line ver_basename ref_hash ref_date
+    local src_file line ver_basename
     for src_file in $files; do
         while IFS= read -r line; do
-            # Extract VER filename
-            ver_basename=$(echo "$line" | sed -n 's/.*Ver-ref:[[:space:]]*\([^ ]*\.md\).*/\1/p')
+            ver_basename=$(echo "$line" | sed -n 's/.*Ver-ref:[[:space:]]*\([^ `]*\.md\).*/\1/p')
             [ -z "$ver_basename" ] && continue
 
-            # Apply filter
             if [ -n "$FILTER_BASENAME" ] && [ "$ver_basename" != "$FILTER_BASENAME" ]; then
                 continue
             fi
 
-            # Extract hash (16 hex chars between backticks)
-            ref_hash=$(echo "$line" | sed -n 's/.*`\([0-9a-f]\{16\}\)`.*/\1/p')
-            [ -z "$ref_hash" ] && continue
-
-            # Extract date
-            ref_date=$(echo "$line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1)
-            [ -z "$ref_date" ] && ref_date="unknown"
-
             local key="${src_file}|${ver_basename}"
-            VER_REFS["$key"]="$ref_hash $ref_date"
-            REF_KEYS+=("$key")
+            if [ -z "${VER_REFS[$key]:-}" ]; then
+                VER_REFS["$key"]=1
+                REF_KEYS+=("$key")
+            fi
         done < <(grep "Ver-ref:" "$src_file")
     done
 }
@@ -3355,7 +3143,6 @@ parse_test_sections() {
         base=$(basename "$f")
         [[ "$base" == *_000_template* ]] && continue
 
-        # Apply filter
         if [ -n "$FILTER_BASENAME" ] && [ "$base" != "$FILTER_BASENAME" ]; then
             continue
         fi
@@ -3371,43 +3158,47 @@ parse_test_sections() {
             }
         ' "$f")
 
-        [ -n "$test_files" ] && VER_TEST_FILES["$base"]="$test_files"
+        VER_TEST_FILES["$base"]="$test_files"
     done
 }
 
-# ─── Compare hashes ──────────────────────────────────────────────
+# ─── Classify refs: missing VER vs. orphan vs. ok ────────────────
 
-CURRENT_COUNT=0
-STALE_COUNT=0
 MISSING_COUNT=0
+ORPHAN_COUNT=0
 
-declare -a RESULT_LINES=()  # "status|src_file|ver_basename|ref_hash|current_hash|ref_date"
+declare -a RESULT_LINES=()  # "status|src_file|ver_basename"
 
-compare_hashes() {
-    local key src_file ver_basename ref_hash ref_date current_hash ver_path status
+classify_refs() {
+    local key src_file ver_basename ver_path test_list listed status
     for key in "${REF_KEYS[@]}"; do
         src_file="${key%%|*}"
         ver_basename="${key##*|}"
-        ref_hash=$(echo "${VER_REFS[$key]}" | cut -d' ' -f1)
-        ref_date=$(echo "${VER_REFS[$key]}" | cut -d' ' -f2)
-
         ver_path="$VER_DIR/$ver_basename"
+
         if [ ! -f "$ver_path" ]; then
             status="missing"
-            current_hash="n/a"
             MISSING_COUNT=$((MISSING_COUNT + 1))
         else
-            current_hash=$(hash_cmd "$ver_path")
-            if [ "$ref_hash" = "$current_hash" ]; then
-                status="current"
-                CURRENT_COUNT=$((CURRENT_COUNT + 1))
+            test_list="${VER_TEST_FILES[$ver_basename]:-}"
+            listed=false
+            while IFS= read -r test_path; do
+                [ -z "$test_path" ] && continue
+                if [ "$test_path" = "$src_file" ]; then
+                    listed=true
+                    break
+                fi
+            done <<< "$test_list"
+
+            if $listed; then
+                continue
             else
-                status="stale"
-                STALE_COUNT=$((STALE_COUNT + 1))
+                status="orphan"
+                ORPHAN_COUNT=$((ORPHAN_COUNT + 1))
             fi
         fi
 
-        RESULT_LINES+=("${status}|${src_file}|${ver_basename}|${ref_hash}|${current_hash}|${ref_date}")
+        RESULT_LINES+=("${status}|${src_file}|${ver_basename}")
     done
 }
 
@@ -3418,11 +3209,12 @@ UNTRACKED_COUNT=0
 declare -a UNTRACKED_LINES=()  # "ver_basename|test_files"
 
 find_untracked() {
-    local ver_basename test_list has_any_ref test_path key
+    local ver_basename test_list has_any_ref test_path key display_files
     for ver_basename in "${!VER_TEST_FILES[@]}"; do
         test_list="${VER_TEST_FILES[$ver_basename]}"
-        has_any_ref=false
+        [ -z "$test_list" ] && continue
 
+        has_any_ref=false
         while IFS= read -r test_path; do
             [ -z "$test_path" ] && continue
             key="${test_path}|${ver_basename}"
@@ -3433,8 +3225,6 @@ find_untracked() {
         done <<< "$test_list"
 
         if ! $has_any_ref; then
-            # Collapse newlines to comma-separated for display
-            local display_files
             display_files=$(echo "$test_list" | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g')
             UNTRACKED_LINES+=("${ver_basename}|${display_files}")
             UNTRACKED_COUNT=$((UNTRACKED_COUNT + 1))
@@ -3457,26 +3247,23 @@ generate_report() {
         echo ""
         echo "## Summary"
         echo ""
-        echo "- Current: $CURRENT_COUNT"
-        echo "- Stale: $STALE_COUNT"
         echo "- Missing VER: $MISSING_COUNT"
+        echo "- Orphan refs: $ORPHAN_COUNT"
         echo "- Untracked VERs: $UNTRACKED_COUNT"
         echo ""
 
         if [ ${#RESULT_LINES[@]} -gt 0 ]; then
-            echo "## Ver-ref Status"
+            echo "## Ver-ref Issues"
             echo ""
-            echo "| Test File | VER | Ref Hash | Current Hash | Status | Sync Date |"
-            echo "|-----------|-----|----------|--------------|--------|-----------|"
+            echo "| Test File | VER | Status |"
+            echo "|-----------|-----|--------|"
 
-            local entry status src_file ver_basename ref_hash current_hash ref_date
+            local entry status src_file ver_basename ver_num ver_id
             for entry in "${RESULT_LINES[@]}"; do
-                IFS='|' read -r status src_file ver_basename ref_hash current_hash ref_date <<< "$entry"
-                # Derive VER-NNN or VER-NNN.NN from basename
-                local ver_num
+                IFS='|' read -r status src_file ver_basename <<< "$entry"
                 ver_num=$(echo "$ver_basename" | sed -n 's/ver_\([0-9][0-9][0-9]\(\.[0-9][0-9]\)\?\)_.*/\1/p')
-                local ver_id="VER-${ver_num}"
-                echo "| \`$src_file\` | $ver_id | \`$ref_hash\` | \`$current_hash\` | $status | $ref_date |"
+                ver_id="VER-${ver_num}"
+                echo "| \`$src_file\` | $ver_id | $status |"
             done
             echo ""
         fi
@@ -3510,11 +3297,10 @@ print_summary() {
     local entry status src_file ver_basename
 
     for entry in "${RESULT_LINES[@]}"; do
-        IFS='|' read -r status src_file ver_basename _ _ _ <<< "$entry"
+        IFS='|' read -r status src_file ver_basename <<< "$entry"
         case "$status" in
-            current) echo "✓ current — $src_file" ;;
-            stale)   echo "⚠ stale   — $src_file" ;;
             missing) echo "✗ missing — $src_file (references $ver_basename)" ;;
+            orphan)  echo "⚠ orphan  — $src_file (Ver-ref to $ver_basename, not in ## Test Implementation)" ;;
         esac
     done
 
@@ -3528,7 +3314,7 @@ print_summary() {
 
 scan_ver_refs
 parse_test_sections
-compare_hashes
+classify_refs
 find_untracked
 
 if [ -z "$FILTER" ]; then
@@ -3540,233 +3326,20 @@ else
 fi
 
 echo ""
-TOTAL=$((STALE_COUNT + MISSING_COUNT + UNTRACKED_COUNT))
+TOTAL=$((MISSING_COUNT + ORPHAN_COUNT + UNTRACKED_COUNT))
+TOTAL_REFS=${#REF_KEYS[@]}
 
-if [ "$TOTAL" -eq 0 ] && [ $((CURRENT_COUNT + UNTRACKED_COUNT)) -eq 0 ]; then
+if [ "$TOTAL" -eq 0 ] && [ "$TOTAL_REFS" -eq 0 ] && [ "$UNTRACKED_COUNT" -eq 0 ]; then
     echo "No Ver-ref lines found."
 elif [ "$TOTAL" -eq 0 ]; then
-    echo "All verification tests are current."
+    echo "All Ver-refs consistent."
 else
-    echo "Summary: $CURRENT_COUNT current, $STALE_COUNT stale, $MISSING_COUNT missing, $UNTRACKED_COUNT untracked"
+    echo "Summary: $MISSING_COUNT missing, $ORPHAN_COUNT orphan, $UNTRACKED_COUNT untracked"
 fi
 
 exit $((TOTAL > 0 ? 1 : 0))
 __SYSKIT_TEMPLATE_END__
 chmod +x ".syskit/scripts/ver-check.sh"
-
-# --- .syskit/scripts/ver-stamp.sh ---
-info "Creating .syskit/scripts/ver-stamp.sh"
-cat > ".syskit/scripts/ver-stamp.sh" << '__SYSKIT_TEMPLATE_END__'
-#!/bin/bash
-# Update Ver-ref hashes in test files for a given verification document
-# Usage: ver-stamp.sh [VER-NNN | ver_NNN_name.md]
-#   No argument: stamp all VERs that have a ## Test Implementation section
-#   With argument: stamp one VER
-# Exit codes: 0 = all updated, 1 = warnings
-set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-VER_DIR="$PROJECT_ROOT/doc/verification"
-
-VER_ARG="${1:-}"
-
-cd "$PROJECT_ROOT"
-
-# Require bash 4+ for associative arrays
-if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
-    echo "Error: bash 4+ required (found ${BASH_VERSION})" >&2
-    exit 1
-fi
-
-# ─── Cross-platform hash command ─────────────────────────────────
-
-if command -v sha256sum &> /dev/null; then
-    hash_cmd() { sha256sum "$1" | cut -c1-16; }
-else
-    hash_cmd() { shasum -a 256 "$1" | cut -c1-16; }
-fi
-
-# ─── Cross-platform sed -i ───────────────────────────────────────
-
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed_inplace() { sed -i '' "$@"; }
-else
-    sed_inplace() { sed -i "$@"; }
-fi
-
-# ─── Resolve VER argument ────────────────────────────────────────
-
-resolve_ver() {
-    local arg="$1"
-
-    # Try direct basename match
-    if [ -f "$VER_DIR/$arg" ]; then
-        echo "$VER_DIR/$arg"
-        return 0
-    fi
-
-    # Check for hierarchical ID (VER-NNN.NN)
-    if echo "$arg" | grep -qE '[0-9]{3}\.[0-9]{2}'; then
-        local num
-        num=$(echo "$arg" | grep -oE '[0-9]{3}\.[0-9]{2}' | head -1)
-        local matches=("$VER_DIR"/ver_${num}_*.md)
-        if [ -f "${matches[0]}" ]; then
-            echo "${matches[0]}"
-            return 0
-        fi
-    else
-        # Extract 3-digit number from VER-NNN, ver-NNN, etc.
-        local num
-        num=$(echo "$arg" | grep -oE '[0-9]{3}' | head -1)
-        if [ -z "$num" ]; then
-            echo "Error: cannot parse VER number from '$arg'" >&2
-            return 1
-        fi
-
-        local matches=("$VER_DIR"/ver_${num}_*.md)
-        if [ -f "${matches[0]}" ]; then
-            echo "${matches[0]}"
-            return 0
-        fi
-    fi
-
-    echo "Error: no verification file found for '$arg'" >&2
-    return 1
-}
-
-# ─── Stamp a single VER file ─────────────────────────────────────
-
-TOTAL_UPDATED=0
-TOTAL_WARNED=0
-
-stamp_ver() {
-    local ver_file="$1"
-    local ver_basename
-    ver_basename=$(basename "$ver_file")
-
-    # Compute current hash
-    local current_hash today
-    current_hash=$(hash_cmd "$ver_file")
-    today=$(date +%Y-%m-%d)
-
-    echo "ver-stamp: $ver_basename"
-    echo "Hash: \`$current_hash\` ($today)"
-    echo ""
-
-    # Extract test file paths from ## Test Implementation
-    local test_files
-    test_files=$(awk '
-        BEGIN { found = 0 }
-        $0 == "## Test Implementation" { found = 1; next }
-        found && /^#/ { match($0, /^#+/); if (RLENGTH <= 2) exit }
-        found && /^- `[^`]+`/ {
-            match($0, /`[^`]+`/)
-            path = substr($0, RSTART+1, RLENGTH-2)
-            if (path !~ /[<>]/) print path
-        }
-    ' "$ver_file")
-
-    if [ -z "$test_files" ]; then
-        echo "No test files listed in ## Test Implementation section."
-        echo ""
-        return
-    fi
-
-    local updated=0
-    local warned=0
-
-    # Build set of listed files for orphan check
-    declare -A listed_files
-
-    # Process each test file
-    while IFS= read -r test_path; do
-        [ -z "$test_path" ] && continue
-        listed_files["$test_path"]=1
-
-        if [ ! -f "$PROJECT_ROOT/$test_path" ]; then
-            echo "⚠ not found  — $test_path"
-            warned=$((warned + 1))
-            continue
-        fi
-
-        if grep -q "Ver-ref:.*${ver_basename}" "$PROJECT_ROOT/$test_path"; then
-            # Extract existing hash to avoid unnecessary date-only changes
-            local existing_hash
-            existing_hash=$(grep "Ver-ref:.*${ver_basename}" "$PROJECT_ROOT/$test_path" | grep -oE '\`[0-9a-f]{16}\`' | tr -d '`' | head -1)
-            if [ "$existing_hash" = "$current_hash" ]; then
-                echo "· current    — $test_path"
-            else
-                # Update hash and date, preserving comment prefix
-                sed_inplace "s|\(Ver-ref:[[:space:]]*${ver_basename}[[:space:]]*\)\`[0-9a-f]\{16\}\`[[:space:]]*[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}|\1\`${current_hash}\` ${today}|" "$PROJECT_ROOT/$test_path"
-                echo "✓ updated    — $test_path"
-                updated=$((updated + 1))
-            fi
-        else
-            echo "⚠ no Ver-ref — $test_path"
-            warned=$((warned + 1))
-        fi
-    done <<< "$test_files"
-
-    # Scan for orphaned references
-    echo ""
-
-    local orphan_files
-    orphan_files=$(git ls-files --cached --others --exclude-standard 2>/dev/null | grep -v '^\.syskit/' | xargs grep -lI "Ver-ref:.*${ver_basename}" 2>/dev/null || true)
-
-    local orphan_found=0
-    if [ -n "$orphan_files" ]; then
-        while IFS= read -r orphan; do
-            [ -z "$orphan" ] && continue
-            if [ -z "${listed_files[$orphan]:-}" ]; then
-                echo "⚠ orphan     — $orphan (has Ver-ref to $ver_basename but not in ## Test Implementation)"
-                warned=$((warned + 1))
-                orphan_found=$((orphan_found + 1))
-            fi
-        done <<< "$orphan_files"
-    fi
-
-    if [ "$orphan_found" -eq 0 ]; then
-        echo "No orphaned references found."
-    fi
-
-    echo ""
-    echo "Summary: $updated updated, $warned warnings"
-    echo ""
-
-    TOTAL_UPDATED=$((TOTAL_UPDATED + updated))
-    TOTAL_WARNED=$((TOTAL_WARNED + warned))
-}
-
-# ─── Main ─────────────────────────────────────────────────────────
-
-if [ -n "$VER_ARG" ]; then
-    # Single VER mode
-    VER_FILE=$(resolve_ver "$VER_ARG")
-    stamp_ver "$VER_FILE"
-else
-    # All VERs mode
-    found_any=false
-    for f in "$VER_DIR"/ver_[0-9]*.md; do
-        [ -f "$f" ] || continue
-        base=$(basename "$f")
-        [[ "$base" == *_000_template* ]] && continue
-        found_any=true
-        stamp_ver "$f"
-    done
-
-    if ! $found_any; then
-        echo "No verification documents found in $VER_DIR."
-        exit 0
-    fi
-
-    echo "═══════════════════════════════════════"
-    echo "Total: $TOTAL_UPDATED updated, $TOTAL_WARNED warnings"
-fi
-
-exit $((TOTAL_WARNED > 0 ? 1 : 0))
-__SYSKIT_TEMPLATE_END__
-chmod +x ".syskit/scripts/ver-stamp.sh"
 
 # --- .syskit/prompts/impact-analysis.md ---
 info "Creating .syskit/prompts/impact-analysis.md"
@@ -3939,14 +3512,13 @@ Follow the task's implementation steps:
 4. If the task references VER-NNN documents and implementation changes affect verified behavior, update the verification document's Procedure and Expected Results sections to match
 5. Ensure Spec-ref traceability for every design unit you implement:
    a. For each UNIT-NNN referenced by this task, read the unit document's `## Implementation` section to find the list of source files.
-   b. For every file listed there — whether you created it or it already existed — verify it contains a Spec-ref comment for that unit. If it does not, add a placeholder:
+   b. For every file listed there — whether you created it or it already existed — verify it contains a Spec-ref comment for that unit. If it does not, add one:
       ```
-      // Spec-ref: unit_NNN_name.md `0000000000000000` 1970-01-01
+      // Spec-ref: unit_NNN_name.md
       ```
       Use the comment prefix appropriate for the file's language (`//` for C/Verilog/SystemVerilog, `#` for Python/Bash/Makefile, `--` for VHDL/SQL/Lua, etc.). Place it near the top of the file, after any file-level header comment or license block.
    c. If you created or modified a file that implements a unit but that file is NOT listed in the unit's `## Implementation` section, add it there in the format: `` - `path/to/file`: <brief description> ``
    d. If you used a different filename than what the `## Implementation` section lists, update the `## Implementation` entry to match the actual filename.
-   e. Do not edit Spec-ref hash values manually — `impl-stamp.sh` will set them after you finish.
 
 ### 4. Verify
 
@@ -4534,15 +4106,15 @@ cat > ".syskit/ref/spec-ref.md" << '__SYSKIT_TEMPLATE_END__'
 Source files that implement a design unit include a `Spec-ref` comment linking back to the unit document:
 
 ```text
-// Spec-ref: unit_006_pixel_pipeline.md `a1b2c3d4e5f6g7h8` 2026-02-11
+// Spec-ref: unit_006_pixel_pipeline.md
 ```
 
 - Filename: the design unit document basename
-- Hash: 16-char truncated SHA256 of the unit file content (same format as manifest)
-- Date: when the implementation was last synced to the spec
 - Comment prefix matches the source language (`//`, `//!`, `#`, `--`, etc.)
 
-## Checking Implementation Freshness
+Spec-refs are pure navigational pointers. They do not track spec content or sync dates.
+
+## Checking Implementation Consistency
 
 ```bash
 .syskit/scripts/impl-check.sh              # full scan → .syskit/impl-status.md
@@ -4551,35 +4123,19 @@ Source files that implement a design unit include a `Spec-ref` comment linking b
 
 Status meanings:
 
-- ✓ current — implementation hash matches current spec
-- ⚠ stale — spec has changed since implementation was last synced
 - ✗ missing — Spec-ref points to a unit file that does not exist
+- ⚠ orphan — source file has a Spec-ref not listed in the unit's `## Implementation`
 - ○ untracked — unit lists source files but none have Spec-ref back-references
-
-## Updating Spec-ref Hashes
-
-After implementing spec changes, update the Spec-ref hashes:
-
-```bash
-.syskit/scripts/impl-stamp.sh UNIT-006
-```
-
-This reads the unit's `## Implementation` section, computes the current SHA256 of the unit file, and updates the hash and date in each source file's Spec-ref comment. It also warns about:
-
-- Source files listed in ## Implementation that have no Spec-ref line
-- Source files with Spec-ref to this unit that are not listed in ## Implementation (orphans)
-
-**Important:** Do not manually edit Spec-ref hash values or write scripts to update them. Always use `impl-stamp.sh`.
 
 ## Creating New Implementation Files
 
-When creating a new implementation file, add a placeholder Spec-ref line:
+When creating a new implementation file, add a Spec-ref line for the unit it implements:
 
 ```text
-// Spec-ref: unit_NNN_name.md `0000000000000000` 1970-01-01
+// Spec-ref: unit_NNN_name.md
 ```
 
-Then run `impl-stamp.sh UNIT-NNN` to set the correct hash.
+Use the comment prefix appropriate for the file's language. Place it near the top of the file, after any file-level header or license block. Also ensure the file is listed in the unit document's `## Implementation` section.
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/ref/ver-ref.md ---
@@ -4590,24 +4146,24 @@ cat > ".syskit/ref/ver-ref.md" << '__SYSKIT_TEMPLATE_END__'
 Test files that implement a verification procedure include a `Ver-ref` comment linking back to the verification document:
 
 ```text
-// Ver-ref: ver_003_watchdog.md `a1b2c3d4e5f6g7h8` 2026-03-16
+// Ver-ref: ver_003_watchdog.md
 ```
 
 - Filename: the verification document basename
-- Hash: 16-char truncated SHA256 of the VER file content
-- Date: when the test was last synced to the spec
 - Comment prefix matches the test language (`//`, `#`, `--`, etc.)
+
+Ver-refs are pure navigational pointers. They do not track VER content or sync dates.
 
 ## Multiple Ver-refs
 
 A test file may have multiple Ver-ref lines if it covers multiple verifications (common for integration tests):
 
 ```text
-// Ver-ref: ver_003_watchdog.md `a1b2c3d4e5f6g7h8` 2026-03-16
-// Ver-ref: ver_007_timeout.md  `f8e7d6c5b4a39201` 2026-03-16
+// Ver-ref: ver_003_watchdog.md
+// Ver-ref: ver_007_timeout.md
 ```
 
-## Checking Test Freshness
+## Checking Test Consistency
 
 ```bash
 .syskit/scripts/ver-check.sh              # full scan → .syskit/ver-status.md
@@ -4616,36 +4172,19 @@ A test file may have multiple Ver-ref lines if it covers multiple verifications 
 
 Status meanings:
 
-- ✓ current — test hash matches current VER spec
-- ⚠ stale — VER spec has changed since test was last synced
 - ✗ missing — Ver-ref points to a VER file that does not exist
+- ⚠ orphan — test file has a Ver-ref not listed in the VER's `## Test Implementation`
 - ○ untracked — VER lists test files but none have Ver-ref back-references
-
-## Updating Ver-ref Hashes
-
-After modifying a verification document, update the Ver-ref hashes:
-
-```bash
-.syskit/scripts/ver-stamp.sh VER-003      # stamp one VER
-.syskit/scripts/ver-stamp.sh              # stamp all VERs
-```
-
-This reads the VER's `## Test Implementation` section, computes the current SHA256 of the VER file, and updates the hash and date in each test file's Ver-ref comment. It also warns about:
-
-- Test files listed in ## Test Implementation that have no Ver-ref line
-- Test files with Ver-ref to this VER that are not listed in ## Test Implementation (orphans)
-
-**Important:** Do not manually edit Ver-ref hash values. Always use `ver-stamp.sh`.
 
 ## Creating New Test Files
 
-When creating a new test file for a verification, add a placeholder Ver-ref line:
+When creating a new test file for a verification, add a Ver-ref line:
 
 ```text
-// Ver-ref: ver_NNN_name.md `0000000000000000` 1970-01-01
+// Ver-ref: ver_NNN_name.md
 ```
 
-Then run `ver-stamp.sh VER-NNN` to set the correct hash.
+Use the comment prefix appropriate for the test file's language. Also ensure the file is listed in the VER document's `## Test Implementation` section.
 
 ## Finding Untested Verifications
 
@@ -5141,13 +4680,7 @@ Run these scripts to verify consistency:
 
 If trace-sync reports issues, report them to the user for manual correction.
 
-For each design unit referenced by the task, update Spec-ref hashes:
-
-```bash
-.syskit/scripts/impl-stamp.sh UNIT-NNN
-```
-
-Then verify implementation freshness:
+Verify Spec-ref consistency (missing / orphan / untracked):
 
 ```bash
 .syskit/scripts/impl-check.sh
@@ -5828,10 +5361,9 @@ This project uses **syskit** for specification-driven development. Specification
 
 ### Working with code
 
-- Source files may contain `Spec-ref:` comments linking to design units — **preserve these; never edit the hash manually**.
+- Source files may contain `Spec-ref:` comments linking to design units — preserve them; they are navigational pointers to the governing spec.
 - Before modifying code, check `doc/design/` for a relevant design unit (`unit_NNN_*.md`) that describes the component's intended behavior.
-- After code changes, run `.syskit/scripts/impl-check.sh` to verify spec-to-implementation freshness.
-- After spec changes, run `.syskit/scripts/impl-stamp.sh UNIT-NNN` to update Spec-ref hashes in source files.
+- After code changes, run `.syskit/scripts/impl-check.sh` to verify Spec-ref consistency (missing / orphan / untracked).
 
 ### Documentation principle
 
@@ -6296,7 +5828,7 @@ Each design unit describes a cohesive piece of the system: its purpose, the requ
 
 - **Naming:** `unit_NNN_<name>.md` (children use dot notation: `unit_NNN.NN_<name>.md`)
 - **Create new:** `.syskit/scripts/new-unit.sh <name>` (add `--parent UNIT-NNN` for a child)
-- **Traceability:** Source files link back via `Spec-ref` comments; run `.syskit/scripts/impl-stamp.sh UNIT-NNN` to keep hashes current.
+- **Traceability:** Source files link back via `Spec-ref` comments. Run `.syskit/scripts/impl-check.sh` to verify bidirectional consistency between `## Implementation` and source-file Spec-refs.
 
 See `.syskit/AGENTS.md` §File Numbering and §Cross-References for shared rules.
 
@@ -6519,7 +6051,7 @@ Each verification document describes a test or analysis procedure that demonstra
 
 - **Naming:** `ver_NNN_<name>.md` (children use dot notation: `ver_NNN.NN_<name>.md`)
 - **Create new:** `.syskit/scripts/new-ver.sh <name>` (add `--parent VER-NNN` for a child)
-- **Traceability:** Test files link back via `Ver-ref` comments; run `.syskit/scripts/ver-stamp.sh VER-NNN` to keep hashes current.
+- **Traceability:** Test files link back via `Ver-ref` comments. Run `.syskit/scripts/ver-check.sh` to verify bidirectional consistency between `## Test Implementation` and test-file Ver-refs.
 
 See `.syskit/AGENTS.md` §File Numbering and §Cross-References for shared rules.
 

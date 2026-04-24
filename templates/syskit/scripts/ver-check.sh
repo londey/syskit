@@ -1,9 +1,9 @@
 #!/bin/bash
-# Check verification test freshness via Ver-ref comment hashes
+# Check Ver-ref consistency between test files and VER ## Test Implementation sections
 # Usage: ver-check.sh [VER-NNN | ver_NNN_name.md]
 #   No argument: full scan, generates .syskit/ver-status.md
 #   With argument: filter to one VER, stdout only
-# Exit codes: 0 = all current, 1 = stale or issues found
+# Exit codes: 0 = no issues, 1 = missing/orphan/untracked issues found
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,29 +20,18 @@ if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
     exit 1
 fi
 
-# ─── Cross-platform hash command ─────────────────────────────────
-
-if command -v sha256sum &> /dev/null; then
-    hash_cmd() { sha256sum "$1" | cut -c1-16; }
-else
-    hash_cmd() { shasum -a 256 "$1" | cut -c1-16; }
-fi
-
 # ─── Resolve VER filter ──────────────────────────────────────────
 
 FILTER_BASENAME=""
 
 if [ -n "$FILTER" ]; then
-    # Try direct basename match
     if [ -f "$VER_DIR/$FILTER" ]; then
         FILTER_BASENAME="$FILTER"
     else
-        # Check for hierarchical ID (VER-NNN.NN)
         if echo "$FILTER" | grep -qE '[0-9]{3}\.[0-9]{2}'; then
             num=$(echo "$FILTER" | grep -oE '[0-9]{3}\.[0-9]{2}' | head -1)
             matches=("$VER_DIR"/ver_${num}_*.md)
         else
-            # Extract 3-digit number from VER-NNN, ver-NNN, etc.
             num=$(echo "$FILTER" | grep -oE '[0-9]{3}' | head -1)
             if [ -z "$num" ]; then
                 echo "Error: cannot parse VER number from '$FILTER'" >&2
@@ -61,8 +50,7 @@ fi
 
 # ─── Scan for Ver-ref lines ──────────────────────────────────────
 
-# source_file -> ver_basename:hash:date (one entry per Ver-ref line)
-declare -A VER_REFS        # "src_file|ver_basename" -> "hash date"
+declare -A VER_REFS        # "src_file|ver_basename" -> 1 (presence marker)
 declare -a REF_KEYS=()     # ordered list of "src_file|ver_basename" keys
 
 scan_ver_refs() {
@@ -71,29 +59,21 @@ scan_ver_refs() {
 
     [ -z "$files" ] && return
 
-    local src_file line ver_basename ref_hash ref_date
+    local src_file line ver_basename
     for src_file in $files; do
         while IFS= read -r line; do
-            # Extract VER filename
-            ver_basename=$(echo "$line" | sed -n 's/.*Ver-ref:[[:space:]]*\([^ ]*\.md\).*/\1/p')
+            ver_basename=$(echo "$line" | sed -n 's/.*Ver-ref:[[:space:]]*\([^ `]*\.md\).*/\1/p')
             [ -z "$ver_basename" ] && continue
 
-            # Apply filter
             if [ -n "$FILTER_BASENAME" ] && [ "$ver_basename" != "$FILTER_BASENAME" ]; then
                 continue
             fi
 
-            # Extract hash (16 hex chars between backticks)
-            ref_hash=$(echo "$line" | sed -n 's/.*`\([0-9a-f]\{16\}\)`.*/\1/p')
-            [ -z "$ref_hash" ] && continue
-
-            # Extract date
-            ref_date=$(echo "$line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | tail -1)
-            [ -z "$ref_date" ] && ref_date="unknown"
-
             local key="${src_file}|${ver_basename}"
-            VER_REFS["$key"]="$ref_hash $ref_date"
-            REF_KEYS+=("$key")
+            if [ -z "${VER_REFS[$key]:-}" ]; then
+                VER_REFS["$key"]=1
+                REF_KEYS+=("$key")
+            fi
         done < <(grep "Ver-ref:" "$src_file")
     done
 }
@@ -109,7 +89,6 @@ parse_test_sections() {
         base=$(basename "$f")
         [[ "$base" == *_000_template* ]] && continue
 
-        # Apply filter
         if [ -n "$FILTER_BASENAME" ] && [ "$base" != "$FILTER_BASENAME" ]; then
             continue
         fi
@@ -125,43 +104,47 @@ parse_test_sections() {
             }
         ' "$f")
 
-        [ -n "$test_files" ] && VER_TEST_FILES["$base"]="$test_files"
+        VER_TEST_FILES["$base"]="$test_files"
     done
 }
 
-# ─── Compare hashes ──────────────────────────────────────────────
+# ─── Classify refs: missing VER vs. orphan vs. ok ────────────────
 
-CURRENT_COUNT=0
-STALE_COUNT=0
 MISSING_COUNT=0
+ORPHAN_COUNT=0
 
-declare -a RESULT_LINES=()  # "status|src_file|ver_basename|ref_hash|current_hash|ref_date"
+declare -a RESULT_LINES=()  # "status|src_file|ver_basename"
 
-compare_hashes() {
-    local key src_file ver_basename ref_hash ref_date current_hash ver_path status
+classify_refs() {
+    local key src_file ver_basename ver_path test_list listed status
     for key in "${REF_KEYS[@]}"; do
         src_file="${key%%|*}"
         ver_basename="${key##*|}"
-        ref_hash=$(echo "${VER_REFS[$key]}" | cut -d' ' -f1)
-        ref_date=$(echo "${VER_REFS[$key]}" | cut -d' ' -f2)
-
         ver_path="$VER_DIR/$ver_basename"
+
         if [ ! -f "$ver_path" ]; then
             status="missing"
-            current_hash="n/a"
             MISSING_COUNT=$((MISSING_COUNT + 1))
         else
-            current_hash=$(hash_cmd "$ver_path")
-            if [ "$ref_hash" = "$current_hash" ]; then
-                status="current"
-                CURRENT_COUNT=$((CURRENT_COUNT + 1))
+            test_list="${VER_TEST_FILES[$ver_basename]:-}"
+            listed=false
+            while IFS= read -r test_path; do
+                [ -z "$test_path" ] && continue
+                if [ "$test_path" = "$src_file" ]; then
+                    listed=true
+                    break
+                fi
+            done <<< "$test_list"
+
+            if $listed; then
+                continue
             else
-                status="stale"
-                STALE_COUNT=$((STALE_COUNT + 1))
+                status="orphan"
+                ORPHAN_COUNT=$((ORPHAN_COUNT + 1))
             fi
         fi
 
-        RESULT_LINES+=("${status}|${src_file}|${ver_basename}|${ref_hash}|${current_hash}|${ref_date}")
+        RESULT_LINES+=("${status}|${src_file}|${ver_basename}")
     done
 }
 
@@ -172,11 +155,12 @@ UNTRACKED_COUNT=0
 declare -a UNTRACKED_LINES=()  # "ver_basename|test_files"
 
 find_untracked() {
-    local ver_basename test_list has_any_ref test_path key
+    local ver_basename test_list has_any_ref test_path key display_files
     for ver_basename in "${!VER_TEST_FILES[@]}"; do
         test_list="${VER_TEST_FILES[$ver_basename]}"
-        has_any_ref=false
+        [ -z "$test_list" ] && continue
 
+        has_any_ref=false
         while IFS= read -r test_path; do
             [ -z "$test_path" ] && continue
             key="${test_path}|${ver_basename}"
@@ -187,8 +171,6 @@ find_untracked() {
         done <<< "$test_list"
 
         if ! $has_any_ref; then
-            # Collapse newlines to comma-separated for display
-            local display_files
             display_files=$(echo "$test_list" | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g')
             UNTRACKED_LINES+=("${ver_basename}|${display_files}")
             UNTRACKED_COUNT=$((UNTRACKED_COUNT + 1))
@@ -211,26 +193,23 @@ generate_report() {
         echo ""
         echo "## Summary"
         echo ""
-        echo "- Current: $CURRENT_COUNT"
-        echo "- Stale: $STALE_COUNT"
         echo "- Missing VER: $MISSING_COUNT"
+        echo "- Orphan refs: $ORPHAN_COUNT"
         echo "- Untracked VERs: $UNTRACKED_COUNT"
         echo ""
 
         if [ ${#RESULT_LINES[@]} -gt 0 ]; then
-            echo "## Ver-ref Status"
+            echo "## Ver-ref Issues"
             echo ""
-            echo "| Test File | VER | Ref Hash | Current Hash | Status | Sync Date |"
-            echo "|-----------|-----|----------|--------------|--------|-----------|"
+            echo "| Test File | VER | Status |"
+            echo "|-----------|-----|--------|"
 
-            local entry status src_file ver_basename ref_hash current_hash ref_date
+            local entry status src_file ver_basename ver_num ver_id
             for entry in "${RESULT_LINES[@]}"; do
-                IFS='|' read -r status src_file ver_basename ref_hash current_hash ref_date <<< "$entry"
-                # Derive VER-NNN or VER-NNN.NN from basename
-                local ver_num
+                IFS='|' read -r status src_file ver_basename <<< "$entry"
                 ver_num=$(echo "$ver_basename" | sed -n 's/ver_\([0-9][0-9][0-9]\(\.[0-9][0-9]\)\?\)_.*/\1/p')
-                local ver_id="VER-${ver_num}"
-                echo "| \`$src_file\` | $ver_id | \`$ref_hash\` | \`$current_hash\` | $status | $ref_date |"
+                ver_id="VER-${ver_num}"
+                echo "| \`$src_file\` | $ver_id | $status |"
             done
             echo ""
         fi
@@ -264,11 +243,10 @@ print_summary() {
     local entry status src_file ver_basename
 
     for entry in "${RESULT_LINES[@]}"; do
-        IFS='|' read -r status src_file ver_basename _ _ _ <<< "$entry"
+        IFS='|' read -r status src_file ver_basename <<< "$entry"
         case "$status" in
-            current) echo "✓ current — $src_file" ;;
-            stale)   echo "⚠ stale   — $src_file" ;;
             missing) echo "✗ missing — $src_file (references $ver_basename)" ;;
+            orphan)  echo "⚠ orphan  — $src_file (Ver-ref to $ver_basename, not in ## Test Implementation)" ;;
         esac
     done
 
@@ -282,7 +260,7 @@ print_summary() {
 
 scan_ver_refs
 parse_test_sections
-compare_hashes
+classify_refs
 find_untracked
 
 if [ -z "$FILTER" ]; then
@@ -294,14 +272,15 @@ else
 fi
 
 echo ""
-TOTAL=$((STALE_COUNT + MISSING_COUNT + UNTRACKED_COUNT))
+TOTAL=$((MISSING_COUNT + ORPHAN_COUNT + UNTRACKED_COUNT))
+TOTAL_REFS=${#REF_KEYS[@]}
 
-if [ "$TOTAL" -eq 0 ] && [ $((CURRENT_COUNT + UNTRACKED_COUNT)) -eq 0 ]; then
+if [ "$TOTAL" -eq 0 ] && [ "$TOTAL_REFS" -eq 0 ] && [ "$UNTRACKED_COUNT" -eq 0 ]; then
     echo "No Ver-ref lines found."
 elif [ "$TOTAL" -eq 0 ]; then
-    echo "All verification tests are current."
+    echo "All Ver-refs consistent."
 else
-    echo "Summary: $CURRENT_COUNT current, $STALE_COUNT stale, $MISSING_COUNT missing, $UNTRACKED_COUNT untracked"
+    echo "Summary: $MISSING_COUNT missing, $ORPHAN_COUNT orphan, $UNTRACKED_COUNT untracked"
 fi
 
 exit $((TOTAL > 0 ? 1 : 0))

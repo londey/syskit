@@ -74,7 +74,6 @@ for file in \
     ".syskit/scripts/new-unit.sh" \
     ".syskit/scripts/trace-sync.sh" \
     ".syskit/scripts/impl-check.sh" \
-    ".syskit/scripts/impl-stamp.sh" \
     ".syskit/scripts/toc-update.sh" \
     ".syskit/scripts/trace.sh" \
     ".claude/commands/syskit-impact.md" \
@@ -125,7 +124,6 @@ for script in \
     ".syskit/scripts/new-unit.sh" \
     ".syskit/scripts/trace-sync.sh" \
     ".syskit/scripts/impl-check.sh" \
-    ".syskit/scripts/impl-stamp.sh" \
     ".syskit/scripts/toc-update.sh" \
     ".syskit/scripts/trace.sh"
 do
@@ -383,55 +381,63 @@ else
 fi
 
 echo ""
-echo "Testing impl-check and impl-stamp..."
+echo "Testing impl-check..."
 
 # Set up: edit unit_001's ## Implementation section to list a source file
 sed -i 's/- `<filepath>`: <description>/- `src\/test_unit.rs`: Main implementation/' doc/design/unit_001_test_unit.md
 
-# Compute the current hash of the unit file
-if command -v sha256sum &> /dev/null; then
-    UNIT1_HASH=$(sha256sum doc/design/unit_001_test_unit.md | cut -c1-16)
-else
-    UNIT1_HASH=$(shasum -a 256 doc/design/unit_001_test_unit.md | cut -c1-16)
-fi
-
-# Create a source file with a matching Spec-ref
+# Create a source file with a filename-only Spec-ref (matches ## Implementation entry)
 mkdir -p src
-cat > src/test_unit.rs << SRCEOF
-// Spec-ref: unit_001_test_unit.md \`${UNIT1_HASH}\` $(date +%Y-%m-%d)
+cat > src/test_unit.rs << 'SRCEOF'
+// Spec-ref: unit_001_test_unit.md
 fn main() {}
 SRCEOF
 git add src/test_unit.rs
 
-# impl-check should report current
-if .syskit/scripts/impl-check.sh UNIT-001 2>/dev/null | grep -q "current"; then
-    pass "impl-check.sh reports current for matching hash"
+# impl-check should report consistent (no issues)
+if .syskit/scripts/impl-check.sh UNIT-001 2>&1 | grep -q "All Spec-refs consistent"; then
+    pass "impl-check.sh reports consistent when Spec-ref matches ## Implementation"
 else
-    fail "impl-check.sh did not report current"
+    fail "impl-check.sh did not report consistent"
 fi
 
-# Modify the unit file to make hash stale
-echo "<!-- additional design note -->" >> doc/design/unit_001_test_unit.md
+# Orphan: source file has Spec-ref but is NOT listed in ## Implementation
+cat > src/orphan_file.rs << 'SRCEOF'
+// Spec-ref: unit_001_test_unit.md
+fn other() {}
+SRCEOF
+git add src/orphan_file.rs
 
-# impl-check should report stale
-if .syskit/scripts/impl-check.sh UNIT-001 2>/dev/null | grep -q "stale"; then
-    pass "impl-check.sh detects stale after unit file change"
+if .syskit/scripts/impl-check.sh UNIT-001 2>&1 | grep -q "orphan"; then
+    pass "impl-check.sh detects orphan Spec-ref not listed in ## Implementation"
 else
-    fail "impl-check.sh did not detect stale"
+    fail "impl-check.sh did not detect orphan"
 fi
 
-# impl-stamp should update the hash
-if .syskit/scripts/impl-stamp.sh UNIT-001 2>/dev/null | grep -q "updated"; then
-    pass "impl-stamp.sh updates Spec-ref hash"
+# Clean up orphan for next test
+rm src/orphan_file.rs
+
+# Untracked: file listed in ## Implementation has no Spec-ref back-reference
+cat > src/test_unit.rs << 'SRCEOF'
+fn main() {}
+SRCEOF
+
+if .syskit/scripts/impl-check.sh UNIT-001 2>&1 | grep -q "untracked"; then
+    pass "impl-check.sh detects untracked unit with no Spec-ref back-references"
 else
-    fail "impl-stamp.sh did not update hash"
+    fail "impl-check.sh did not detect untracked"
 fi
 
-# impl-check should now report current again
-if .syskit/scripts/impl-check.sh UNIT-001 2>/dev/null | grep -q "current"; then
-    pass "impl-check.sh reports current after stamp"
+# Missing: Spec-ref points to a non-existent unit file
+cat > src/test_unit.rs << 'SRCEOF'
+// Spec-ref: unit_999_nonexistent.md
+fn main() {}
+SRCEOF
+
+if .syskit/scripts/impl-check.sh 2>&1 | grep -q "missing"; then
+    pass "impl-check.sh detects missing unit"
 else
-    fail "impl-check.sh still reports stale after stamp"
+    fail "impl-check.sh did not detect missing unit"
 fi
 
 echo ""

@@ -13,7 +13,7 @@ Each verification document describes a test or analysis procedure that demonstra
 
 - **Naming:** `ver_NNN_<name>.md` (children use dot notation: `ver_NNN.NN_<name>.md`)
 - **Create new:** `.syskit/scripts/new-ver.sh <name>` (add `--parent VER-NNN` for a child)
-- **Traceability:** Test files link back via `Ver-ref` comments; run `.syskit/scripts/ver-stamp.sh VER-NNN` to keep hashes current.
+- **Traceability:** Test files link back via `Ver-ref` comments. Run `.syskit/scripts/ver-check.sh` to verify bidirectional consistency between `## Test Implementation` and test-file Ver-refs.
 
 See `.syskit/AGENTS.md` §File Numbering and §Cross-References for shared rules.
 

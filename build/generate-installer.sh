@@ -128,6 +128,7 @@ embed_file "$TEMPLATES_DIR/doc/design/ARCHITECTURE.md" ".syskit/templates/doc/de
 embed_file "$TEMPLATES_DIR/doc/verification/ver_000_template.md" ".syskit/templates/doc/verification/ver_000_template.md" "644" >> "$OUTPUT"
 embed_file "$TEMPLATES_DIR/doc/verification/test_strategy.md" ".syskit/templates/doc/verification/test_strategy.md" "644" >> "$OUTPUT"
 embed_file "$TEMPLATES_DIR/doc/verification/README.md" ".syskit/templates/doc/verification/README.md" "644" >> "$OUTPUT"
+embed_file "$TEMPLATES_DIR/doc/README.md" ".syskit/templates/doc/README.md" "644" >> "$OUTPUT"
 
 # Copy templates from .syskit/templates/ to doc/
 # Copy-templates: always overwrite (users copy these, not edit originals)
@@ -147,6 +148,7 @@ for tmpl in \
     "doc/requirements/states_and_modes.md" \
     "doc/design/concept_of_execution.md" \
     "doc/design/design_decisions.md" \
+    "doc/README.md" \
     "doc/requirements/README.md" \
     "doc/interfaces/README.md" \
     "doc/design/README.md" \

@@ -87,40 +87,23 @@ if [ -f "$FILEPATH" ]; then
     exit 1
 fi
 
-cat > "$FILEPATH" << EOF
-# $ID: $(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+TEMPLATE="$PROJECT_ROOT/.syskit/templates/doc/interfaces/int_000_template.md"
 
-## Type
+if [ ! -f "$TEMPLATE" ]; then
+    echo "Error: template not found at $TEMPLATE" >&2
+    echo "Re-run the syskit installer to create it." >&2
+    exit 1
+fi
 
-Internal | External Standard | External Service
+TITLE=$(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
 
-## External Specification
-
-<!-- For external interfaces only -->
-- **Standard:** <name and version>
-- **Reference:** <URL or document reference>
-
-## Specification
-
-<!-- For internal interfaces, define the specification here -->
-<!-- For external interfaces, document your usage subset -->
-
-### Overview
-
-<Brief description of the interface>
-
-### Details
-
-<Detailed specification>
-
-## Constraints
-
-<Any constraints or limitations on usage>
-
-## Notes
-
-<Additional context>
-EOF
+{
+    printf '# %s: %s\n' "$ID" "$TITLE"
+    awk '
+        past_sep { print; next }
+        /^---[[:space:]]*$/ { past_sep = 1 }
+    ' "$TEMPLATE"
+} > "$FILEPATH"
 
 echo "Created: $FILEPATH"
 echo "ID: $ID"

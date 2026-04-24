@@ -22,7 +22,7 @@ Reference: `doc/requirements/states_and_modes.md`
 
 ## Data Flow
 
-<How data moves through the system>
+<How data moves through the system. Cover timing/synchronization and resource management (memory, buffers, connections) here — add sub-headings only when the content would otherwise be hard to navigate.>
 
 Consider using a diagram:
 
@@ -34,22 +34,10 @@ Consider using a diagram:
 
 ## Event Handling
 
-<How the system responds to events>
+<How the system responds to events, including how errors are detected and handled. Add sub-headings only when the content is non-trivial.>
 
 ### Event: <event name>
 
 - **Source:** <where the event comes from>
 - **Handler:** UNIT-NNN
 - **Response:** <what happens>
-
-## Timing and Synchronization
-
-<Any timing requirements or synchronization mechanisms>
-
-## Error Handling
-
-<How errors are detected and handled>
-
-## Resource Management
-
-<How resources (memory, buffers, connections) are managed>

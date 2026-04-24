@@ -1,36 +1,11 @@
 # Design Decisions
 
-This document records significant design decisions using a lightweight Architecture Decision Record (ADR) format.
+## Purpose
 
-## Template
+Broadly-affecting choices that shape the system — framework selection, architectural patterns, language or platform trade-offs. Each entry captures a decision a new engineer needs to understand *why* the design is the way it is.
 
-When adding a new decision, copy this template:
+This is not a log of when decisions were made. Git history records that. Entries describe the choice and its reasoning, not the moment the team made it.
 
-```markdown
-## DD-NNN: <Title>
+Entries use the Architecture Decision Record (ADR) format — see `doc/design/README.md` §ADR Format for the skeleton.
 
-**Date:** YYYY-MM-DD  
-**Status:** Proposed | Accepted | Superseded by DD-XXX
-
-### Context
-
-<What is the issue or question that needs a decision?>
-
-### Decision
-
-<What is the decision that was made?>
-
-### Rationale
-
-<Why was this decision made? What alternatives were considered?>
-
-### Consequences
-
-<What are the implications of this decision?>
-```
-
----
-
-## Decisions
-
-<!-- Add decisions below, newest first -->
+<!-- Add decisions below -->

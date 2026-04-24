@@ -87,50 +87,23 @@ if [ -f "$FILEPATH" ]; then
     exit 1
 fi
 
-cat > "$FILEPATH" << EOF
-# $ID: $(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+TEMPLATE="$PROJECT_ROOT/.syskit/templates/doc/verification/ver_000_template.md"
 
-## Verification Method
+if [ ! -f "$TEMPLATE" ]; then
+    echo "Error: template not found at $TEMPLATE" >&2
+    echo "Re-run the syskit installer to create it." >&2
+    exit 1
+fi
 
-Choose one:
-- **Test:** Verified by executing a test procedure
-- **Analysis:** Verified by technical evaluation
-- **Inspection:** Verified by examination
-- **Demonstration:** Verified by operation
+TITLE=$(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
 
-## Verifies Requirements
-
-- REQ-NNN (<requirement name>)
-
-## Verified Design Units
-
-- UNIT-NNN (<unit name>)
-
-## Preconditions
-
-<What must be true before this verification can be executed>
-
-## Procedure
-
-<Step-by-step verification procedure>
-
-1. <Step 1>
-2. <Step 2>
-3. ...
-
-## Expected Results
-
-- **Pass Criteria:** <observable outcome that means the requirement is satisfied>
-- **Fail Criteria:** <observable outcome that means the requirement is NOT satisfied>
-
-## Test Implementation
-
-- \`<test filepath>\`: <what it tests>
-
-## Notes
-
-<Additional context, edge cases, known limitations>
-EOF
+{
+    printf '# %s: %s\n' "$ID" "$TITLE"
+    awk '
+        past_sep { print; next }
+        /^---[[:space:]]*$/ { past_sep = 1 }
+    ' "$TEMPLATE"
+} > "$FILEPATH"
 
 echo "Created: $FILEPATH"
 echo "ID: $ID"

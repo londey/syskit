@@ -87,47 +87,28 @@ if [ -f "$FILEPATH" ]; then
     exit 1
 fi
 
-# Set parent display: use provided parent, or "None" for top-level
 PARENT_DISPLAY="${PARENT:-None}"
+TEMPLATE="$PROJECT_ROOT/.syskit/templates/doc/requirements/req_000_template.md"
 
-cat > "$FILEPATH" << EOF
-# $ID: $(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+if [ ! -f "$TEMPLATE" ]; then
+    echo "Error: template not found at $TEMPLATE" >&2
+    echo "Re-run the syskit installer to create it." >&2
+    exit 1
+fi
 
-## Classification
+TITLE=$(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
 
-- **Priority:** Essential | Important | Nice-to-have
-- **Stability:** Stable | Evolving | Volatile
-- **Verification:** Test | Analysis | Inspection | Demonstration
-
-## Requirement
-
-When [condition/trigger], the system SHALL [observable behavior/response].
-
-<!-- Format: When [condition], the system SHALL/SHOULD/MAY [behavior].
-     Each requirement must have a testable trigger and observable outcome.
-     Describe capabilities/behaviors, not data layout or encoding.
-     For struct fields, byte formats, protocols → use an interface (INT-NNN). -->
-
-## Rationale
-
-<Why this requirement exists>
-
-## Parent Requirements
-
-- ${PARENT_DISPLAY}
-
-## Interfaces
-
-- INT-NNN (<interface name>)
-
-## Verification Method
-
-<How this requirement will be verified>
-
-## Notes
-
-<Additional context>
-EOF
+{
+    printf '# %s: %s\n' "$ID" "$TITLE"
+    awk '
+        past_sep { print; next }
+        /^---[[:space:]]*$/ { past_sep = 1 }
+    ' "$TEMPLATE" | awk -v parent="$PARENT_DISPLAY" '
+        /^## Parent Requirements/ { in_parent = 1; print; next }
+        in_parent && /^- / { print "- " parent; in_parent = 0; next }
+        { print }
+    '
+} > "$FILEPATH"
 
 echo "Created: $FILEPATH"
 echo "ID: $ID"

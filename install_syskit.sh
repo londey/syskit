@@ -1495,40 +1495,23 @@ if [ -f "$FILEPATH" ]; then
     exit 1
 fi
 
-cat > "$FILEPATH" << EOF
-# $ID: $(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+TEMPLATE="$PROJECT_ROOT/.syskit/templates/doc/interfaces/int_000_template.md"
 
-## Type
+if [ ! -f "$TEMPLATE" ]; then
+    echo "Error: template not found at $TEMPLATE" >&2
+    echo "Re-run the syskit installer to create it." >&2
+    exit 1
+fi
 
-Internal | External Standard | External Service
+TITLE=$(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
 
-## External Specification
-
-<!-- For external interfaces only -->
-- **Standard:** <name and version>
-- **Reference:** <URL or document reference>
-
-## Specification
-
-<!-- For internal interfaces, define the specification here -->
-<!-- For external interfaces, document your usage subset -->
-
-### Overview
-
-<Brief description of the interface>
-
-### Details
-
-<Detailed specification>
-
-## Constraints
-
-<Any constraints or limitations on usage>
-
-## Notes
-
-<Additional context>
-EOF
+{
+    printf '# %s: %s\n' "$ID" "$TITLE"
+    awk '
+        past_sep { print; next }
+        /^---[[:space:]]*$/ { past_sep = 1 }
+    ' "$TEMPLATE"
+} > "$FILEPATH"
 
 echo "Created: $FILEPATH"
 echo "ID: $ID"
@@ -1627,47 +1610,28 @@ if [ -f "$FILEPATH" ]; then
     exit 1
 fi
 
-# Set parent display: use provided parent, or "None" for top-level
 PARENT_DISPLAY="${PARENT:-None}"
+TEMPLATE="$PROJECT_ROOT/.syskit/templates/doc/requirements/req_000_template.md"
 
-cat > "$FILEPATH" << EOF
-# $ID: $(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+if [ ! -f "$TEMPLATE" ]; then
+    echo "Error: template not found at $TEMPLATE" >&2
+    echo "Re-run the syskit installer to create it." >&2
+    exit 1
+fi
 
-## Classification
+TITLE=$(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
 
-- **Priority:** Essential | Important | Nice-to-have
-- **Stability:** Stable | Evolving | Volatile
-- **Verification:** Test | Analysis | Inspection | Demonstration
-
-## Requirement
-
-When [condition/trigger], the system SHALL [observable behavior/response].
-
-<!-- Format: When [condition], the system SHALL/SHOULD/MAY [behavior].
-     Each requirement must have a testable trigger and observable outcome.
-     Describe capabilities/behaviors, not data layout or encoding.
-     For struct fields, byte formats, protocols → use an interface (INT-NNN). -->
-
-## Rationale
-
-<Why this requirement exists>
-
-## Parent Requirements
-
-- ${PARENT_DISPLAY}
-
-## Interfaces
-
-- INT-NNN (<interface name>)
-
-## Verification Method
-
-<How this requirement will be verified>
-
-## Notes
-
-<Additional context>
-EOF
+{
+    printf '# %s: %s\n' "$ID" "$TITLE"
+    awk '
+        past_sep { print; next }
+        /^---[[:space:]]*$/ { past_sep = 1 }
+    ' "$TEMPLATE" | awk -v parent="$PARENT_DISPLAY" '
+        /^## Parent Requirements/ { in_parent = 1; print; next }
+        in_parent && /^- / { print "- " parent; in_parent = 0; next }
+        { print }
+    '
+} > "$FILEPATH"
 
 echo "Created: $FILEPATH"
 echo "ID: $ID"
@@ -1766,59 +1730,23 @@ if [ -f "$FILEPATH" ]; then
     exit 1
 fi
 
-cat > "$FILEPATH" << EOF
-# $ID: $(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+TEMPLATE="$PROJECT_ROOT/.syskit/templates/doc/design/unit_000_template.md"
 
-## Purpose
+if [ ! -f "$TEMPLATE" ]; then
+    echo "Error: template not found at $TEMPLATE" >&2
+    echo "Re-run the syskit installer to create it." >&2
+    exit 1
+fi
 
-<What this unit does and why it exists>
+TITLE=$(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
 
-## Implements Requirements
-
-- REQ-NNN (<requirement name>)
-
-## Interfaces
-
-### Provides
-
-- INT-NNN (<interface name>)
-
-### Consumes
-
-- INT-NNN (<interface name>)
-
-### Internal Interfaces
-
-- Connects to UNIT-NNN via <description>
-
-## Design Description
-
-<How this unit works>
-
-### Inputs
-
-<Input signals, parameters, or data>
-
-### Outputs
-
-<Output signals, parameters, or data>
-
-### Internal State
-
-<Any internal state maintained>
-
-### Algorithm / Behavior
-
-<Description of the unit's behavior>
-
-## Implementation
-
-- \`<filepath>\`: <description>
-
-## Design Notes
-
-<Additional design considerations, tradeoffs, alternatives considered>
-EOF
+{
+    printf '# %s: %s\n' "$ID" "$TITLE"
+    awk '
+        past_sep { print; next }
+        /^---[[:space:]]*$/ { past_sep = 1 }
+    ' "$TEMPLATE"
+} > "$FILEPATH"
 
 echo "Created: $FILEPATH"
 echo "ID: $ID"
@@ -1917,50 +1845,23 @@ if [ -f "$FILEPATH" ]; then
     exit 1
 fi
 
-cat > "$FILEPATH" << EOF
-# $ID: $(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+TEMPLATE="$PROJECT_ROOT/.syskit/templates/doc/verification/ver_000_template.md"
 
-## Verification Method
+if [ ! -f "$TEMPLATE" ]; then
+    echo "Error: template not found at $TEMPLATE" >&2
+    echo "Re-run the syskit installer to create it." >&2
+    exit 1
+fi
 
-Choose one:
-- **Test:** Verified by executing a test procedure
-- **Analysis:** Verified by technical evaluation
-- **Inspection:** Verified by examination
-- **Demonstration:** Verified by operation
+TITLE=$(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
 
-## Verifies Requirements
-
-- REQ-NNN (<requirement name>)
-
-## Verified Design Units
-
-- UNIT-NNN (<unit name>)
-
-## Preconditions
-
-<What must be true before this verification can be executed>
-
-## Procedure
-
-<Step-by-step verification procedure>
-
-1. <Step 1>
-2. <Step 2>
-3. ...
-
-## Expected Results
-
-- **Pass Criteria:** <observable outcome that means the requirement is satisfied>
-- **Fail Criteria:** <observable outcome that means the requirement is NOT satisfied>
-
-## Test Implementation
-
-- \`<test filepath>\`: <what it tests>
-
-## Notes
-
-<Additional context, edge cases, known limitations>
-EOF
+{
+    printf '# %s: %s\n' "$ID" "$TITLE"
+    awk '
+        past_sep { print; next }
+        /^---[[:space:]]*$/ { past_sep = 1 }
+    ' "$TEMPLATE"
+} > "$FILEPATH"
 
 echo "Created: $FILEPATH"
 echo "ID: $ID"
@@ -4256,17 +4157,9 @@ You are drafting and applying proposed specification changes for a subset of aff
    - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN) remain consistent
    - For verification documents, ensure "Verifies Requirements" and "Verified Design Units" sections reflect the current requirements and design units. Update the Procedure and Expected Results sections if the verified behavior changed.
    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
-   - **Document style rules** (critical):
-     - Write what the system *is now*, not how it changed. No changelog-style language ("previously", "was changed to", "updated from"). The git diff is the changelog.
-     - Do not add version numbers, revision history, or "Version:" fields to internal documents. Git is the version control.
-     - Keep rationale sections brief — explain *why*, don't re-describe the system. Reference other docs by ID (REQ-NNN, INT-NNN, UNIT-NNN) instead of duplicating their content.
-     - After editing, re-read the document — it should stand alone as the definitive reference.
+   - **Document style** (critical): Write what the system *is now* — no changelog language, no version numbers. See `.syskit/ref/document-formats.md` for full style rules.
 
-4. While editing, validate each requirement you modify or create:
-   - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
-   - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
-   - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
-   - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
+4. While editing, validate each requirement against `.syskit/ref/requirement-format.md` §Quality Criteria. In particular: condition/response pattern, singular scope, no data-layout details (move those to INT), verifiable trigger/outcome.
 
 5. Write a chunk summary to `{{ANALYSIS_FOLDER}}/chunk_{{CHUNK_NUMBER}}.md` in this format:
 
@@ -4325,17 +4218,9 @@ You are drafting and applying proposed specification changes based on a complete
    - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN) remain consistent
    - For verification documents, ensure "Verifies Requirements" and "Verified Design Units" sections reflect the current requirements and design units. Update the Procedure and Expected Results sections if the verified behavior changed.
    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
-   - **Document style rules** (critical):
-     - Write what the system *is now*, not how it changed. No changelog-style language ("previously", "was changed to", "updated from"). The git diff is the changelog.
-     - Do not add version numbers, revision history, or "Version:" fields to internal documents. Git is the version control.
-     - Keep rationale sections brief — explain *why*, don't re-describe the system. Reference other docs by ID (REQ-NNN, INT-NNN, UNIT-NNN) instead of duplicating their content.
-     - After editing, re-read the document — it should stand alone as the definitive reference.
+   - **Document style** (critical): Write what the system *is now* — no changelog language, no version numbers. See `.syskit/ref/document-formats.md` for full style rules.
 
-4. While editing, validate each requirement you modify or create:
-   - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
-   - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
-   - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
-   - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
+4. While editing, validate each requirement against `.syskit/ref/requirement-format.md` §Quality Criteria. In particular: condition/response pattern, singular scope, no data-layout details (move those to INT), verifiable trigger/outcome.
 
 5. Write a change summary to `{{ANALYSIS_FOLDER}}/proposed_changes.md` in this format:
 
@@ -4454,17 +4339,9 @@ The following documents may need modification based on the feedback:
    - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN) remain consistent
    - For verification documents, ensure "Verifies Requirements" and "Verified Design Units" sections reflect the current requirements and design units. Update the Procedure and Expected Results sections if the verified behavior changed.
    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
-   - **Document style rules** (critical):
-     - Write what the system *is now*, not how it changed. No changelog-style language ("previously", "was changed to", "updated from"). The git diff is the changelog.
-     - Do not add version numbers, revision history, or "Version:" fields to internal documents. Git is the version control.
-     - Keep rationale sections brief — explain *why*, don't re-describe the system. Reference other docs by ID (REQ-NNN, INT-NNN, UNIT-NNN) instead of duplicating their content.
-     - After editing, re-read the document — it should stand alone as the definitive reference.
+   - **Document style** (critical): Write what the system *is now* — no changelog language, no version numbers. See `.syskit/ref/document-formats.md` for full style rules.
 
-7. While editing, validate each requirement you modify or create:
-   - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
-   - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
-   - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
-   - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
+7. While editing, validate each requirement against `.syskit/ref/requirement-format.md` §Quality Criteria. In particular: condition/response pattern, singular scope, no data-layout details (move those to INT), verifiable trigger/outcome.
 
 8. If the feedback implies changes to documents NOT in your affected files list (e.g., the user's feedback about one document creates a consistency issue with another), note this in the cross-impact section of your summary but do NOT modify documents outside your list.
 
@@ -5996,31 +5873,19 @@ Or copy this template and modify.
 
 ---
 
-## Classification
-
-- **Priority:** Essential | Important | Nice-to-have
-- **Stability:** Stable | Evolving | Volatile
-- **Verification:** Test | Analysis | Inspection | Demonstration
-
 ## Requirement
 
 When [condition/trigger], the system SHALL [observable behavior/response].
 
-Format: **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
-
-- Each requirement must have a testable trigger condition and observable outcome
-- Describe capabilities/behaviors, not data layout or encoding
-- For struct fields, byte formats, protocols → create an interface (INT-NNN) and reference it
+See `.syskit/ref/requirement-format.md` for required format, quality criteria, and level-of-abstraction guidance.
 
 ## Rationale
 
-<Why this requirement exists. What problem does it solve? What drives this need?>
+<Why this requirement exists. Keep to ≤ 2 sentences; explain the *why*, do not restate the requirement or enumerate all design options.>
 
 ## Parent Requirements
 
-- REQ-NNN (<parent requirement name>)
-- Or "None" if this is a top-level requirement
-- Child requirements use hierarchical IDs: REQ-NNN.NN (e.g., REQ-004.01 is a child of REQ-004)
+- REQ-NNN (<parent requirement name>) — or "None" if top-level
 
 ## Interfaces
 
@@ -6028,16 +5893,11 @@ Format: **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
 
 ## Verification Method
 
-<How this requirement will be verified>
-
-- **Test:** Verified by executing a test procedure
-- **Analysis:** Verified by technical evaluation
-- **Inspection:** Verified by examination
-- **Demonstration:** Verified by operation
+<How this requirement will be verified: Test | Analysis | Inspection | Demonstration. VER docs that cover this requirement list it in their "Verifies Requirements" section — do not mirror that list here.>
 
 ## Notes
 
-<Additional context, open questions, or references>
+<Optional. Include only if there is genuine context, caveat, or open question to add — do not restate the requirement or title.>
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/templates/doc/requirements/quality_metrics.md ---
@@ -6195,10 +6055,7 @@ Or copy this template and modify.
 
 ## Type
 
-Choose one:
-- **Internal:** Defined by this project
-- **External Standard:** Defined by an external specification (e.g., PNG, SPI, USB)
-- **External Service:** Defined by an external service (e.g., REST API)
+Internal | External Standard | External Service
 
 ## External Specification
 
@@ -6218,23 +6075,7 @@ Choose one:
 
 ### Details
 
-<Detailed specification>
-
-For hardware interfaces, consider:
-- Signal definitions
-- Timing requirements
-- Electrical characteristics
-
-For data formats, consider:
-- Field definitions
-- Encoding
-- Constraints and valid ranges
-
-For APIs, consider:
-- Endpoints / functions
-- Parameters
-- Return values
-- Error conditions
+<Detailed specification. See `doc/interfaces/README.md` for a completeness checklist by interface type.>
 
 ## Constraints
 
@@ -6242,7 +6083,7 @@ For APIs, consider:
 
 ## Notes
 
-<Additional context, rationale for choices, compatibility considerations>
+<Optional. External consumers not covered by a UNIT (e.g., host-side drivers) may be listed here. Provider/consumer UNITs are declared by the UNIT docs themselves — do not mirror that list here. Reverse lists of REQs or UNITs that reference this interface are maintained by those documents, not here.>
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/templates/doc/design/unit_000_template.md ---
@@ -6264,12 +6105,6 @@ Or copy this template and modify.
 
 <What this unit does and why it exists>
 
-A design unit is a cohesive piece of the system that can be implemented and tested somewhat independently. It might be:
-- A Verilog module
-- A C source file or library
-- A class or module in higher-level languages
-- A logical grouping of closely related code
-
 ## Implements Requirements
 
 - REQ-NNN (<requirement name>)
@@ -6282,39 +6117,17 @@ List all requirements this unit helps satisfy.
 
 - INT-NNN (<interface name>)
 
-Interfaces this unit implements (is the provider of).
-
 ### Consumes
 
 - INT-NNN (<interface name>)
-
-Interfaces this unit uses (is a consumer of).
 
 ### Internal Interfaces
 
 - Connects to UNIT-NNN via <description>
 
-Internal connections not formally specified as interfaces.
-
 ## Design Description
 
-<How this unit works>
-
-### Inputs
-
-<Input signals, parameters, or data>
-
-### Outputs
-
-<Output signals, parameters, or data>
-
-### Internal State
-
-<Any internal state maintained by this unit>
-
-### Algorithm / Behavior
-
-<Description of the unit's behavior, state machines, data flow>
+<How this unit works. Describe inputs, outputs, internal state, and algorithm together — add the sub-headings below only when the content would otherwise be hard to navigate. Do not keep empty headings as placeholders.>
 
 ## Implementation
 
@@ -6324,14 +6137,7 @@ List all source files that implement this unit.
 
 ## Design Notes
 
-<Additional design considerations>
-
-Consider documenting:
-- Alternatives considered and why they were rejected
-- Performance characteristics
-- Resource usage (for FPGA: LUTs, registers, BRAM)
-- Known limitations
-- Future improvement ideas
+<Optional. Document non-obvious alternatives considered, performance characteristics, or known limitations. Do not duplicate bit-accurate algorithms from the digital twin, register layouts from `gpu_regs.rdl`, or resource budgets from `pipeline/pipeline.yaml` — link to the authoritative source instead.>
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/templates/doc/design/concept_of_execution.md ---
@@ -6361,7 +6167,7 @@ Reference: `doc/requirements/states_and_modes.md`
 
 ## Data Flow
 
-<How data moves through the system>
+<How data moves through the system. Cover timing/synchronization and resource management (memory, buffers, connections) here — add sub-headings only when the content would otherwise be hard to navigate.>
 
 Consider using a diagram:
 
@@ -6373,25 +6179,13 @@ Consider using a diagram:
 
 ## Event Handling
 
-<How the system responds to events>
+<How the system responds to events, including how errors are detected and handled. Add sub-headings only when the content is non-trivial.>
 
 ### Event: <event name>
 
 - **Source:** <where the event comes from>
 - **Handler:** UNIT-NNN
 - **Response:** <what happens>
-
-## Timing and Synchronization
-
-<Any timing requirements or synchronization mechanisms>
-
-## Error Handling
-
-<How errors are detected and handled>
-
-## Resource Management
-
-<How resources (memory, buffers, connections) are managed>
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/templates/doc/design/design_decisions.md ---
@@ -6399,40 +6193,15 @@ info "Creating .syskit/templates/doc/design/design_decisions.md"
 cat > ".syskit/templates/doc/design/design_decisions.md" << '__SYSKIT_TEMPLATE_END__'
 # Design Decisions
 
-This document records significant design decisions using a lightweight Architecture Decision Record (ADR) format.
+## Purpose
 
-## Template
+Broadly-affecting choices that shape the system — framework selection, architectural patterns, language or platform trade-offs. Each entry captures a decision a new engineer needs to understand *why* the design is the way it is.
 
-When adding a new decision, copy this template:
+This is not a log of when decisions were made. Git history records that. Entries describe the choice and its reasoning, not the moment the team made it.
 
-```markdown
-## DD-NNN: <Title>
+Entries use the Architecture Decision Record (ADR) format — see `doc/design/README.md` §ADR Format for the skeleton.
 
-**Date:** YYYY-MM-DD  
-**Status:** Proposed | Accepted | Superseded by DD-XXX
-
-### Context
-
-<What is the issue or question that needs a decision?>
-
-### Decision
-
-<What is the decision that was made?>
-
-### Rationale
-
-<Why was this decision made? What alternatives were considered?>
-
-### Consequences
-
-<What are the implications of this decision?>
-```
-
----
-
-## Decisions
-
-<!-- Add decisions below, newest first -->
+<!-- Add decisions below -->
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/templates/doc/requirements/README.md ---
@@ -6440,33 +6209,20 @@ info "Creating .syskit/templates/doc/requirements/README.md"
 cat > ".syskit/templates/doc/requirements/README.md" << '__SYSKIT_TEMPLATE_END__'
 # Requirements
 
-*Software Requirements Specification (SRS) for <system name>*
+*Software Requirements Specification (SRS)*
 
-This directory contains the system requirements specification — the authoritative record of **what** the system must do.
-
-## System Overview
-
-<Brief description of the system: what it is, what it does, and its operational context.>
-
-## Document Description
-
-<Brief overview of what this document covers and how it is organized.>
-
-## Purpose
-
-Each requirement document defines a single, testable system behavior using the condition/response pattern:
+Each requirement document defines a single, testable system behavior:
 
 > **When** [condition], the system **SHALL/SHOULD/MAY** [behavior].
 
-Requirements are traceable: each references the interfaces (`INT-NNN`) it depends on, and design units reference the requirements they implement. Together they form a complete, verifiable description of system capability.
+Requirements reference the interfaces they depend on (`INT-NNN`); design units reference the requirements they implement.
 
 ## Conventions
 
-- **Naming:** `req_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
-- **Child requirements:** `req_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `req_004.01_voltage_levels.md`)
-- **Create new:** `.syskit/scripts/new-req.sh <name>` or `.syskit/scripts/new-req.sh --parent REQ-NNN <name>`
-- **Cross-references:** Use `REQ-NNN` or `REQ-NNN.NN` identifiers (derived from filename)
-- **Hierarchy:** Parent relationship is visible in the ID; `Parent Requirements` field provides explicit back-reference
+- **Naming:** `req_NNN_<name>.md` (children use dot notation: `req_NNN.NN_<name>.md`)
+- **Create new:** `.syskit/scripts/new-req.sh <name>` (add `--parent REQ-NNN` for a child)
+
+See `.syskit/AGENTS.md` §File Numbering and §Cross-References for shared rules.
 
 ## Framework Documents
 
@@ -6485,23 +6241,9 @@ info "Creating .syskit/templates/doc/interfaces/README.md"
 cat > ".syskit/templates/doc/interfaces/README.md" << '__SYSKIT_TEMPLATE_END__'
 # Interfaces
 
-*Interface Design Description (IDD) for <system name>*
+*Interface Design Description (IDD)*
 
-This directory contains the interface specifications — the authoritative record of **contracts** between components and with external systems.
-
-## System Overview
-
-<Brief description of the system: what it is, what it does, and its operational context.>
-
-## Document Description
-
-<Brief overview of what this document covers and how it is organized.>
-
-## Purpose
-
-Each interface document defines a precise contract: data formats, protocols, APIs, or signal definitions that components agree on. Interfaces are the bridge between requirements (what) and design (how), ensuring components can be developed and tested independently.
-
-Interface types:
+Each interface document defines a precise contract: data formats, protocols, APIs, or signal definitions. Types:
 
 - **Internal** — Defined by this project (register maps, packet formats, internal APIs)
 - **External Standard** — Defined by an external spec (PNG, SPI, USB)
@@ -6509,10 +6251,30 @@ Interface types:
 
 ## Conventions
 
-- **Naming:** `int_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
-- **Child interfaces:** `int_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `int_005.01_uart_registers.md`)
-- **Create new:** `.syskit/scripts/new-int.sh <name>` or `.syskit/scripts/new-int.sh --parent INT-NNN <name>`
-- **Cross-references:** Use `INT-NNN` or `INT-NNN.NN` identifiers (derived from filename)
+- **Naming:** `int_NNN_<name>.md` (children use dot notation: `int_NNN.NN_<name>.md`)
+- **Create new:** `.syskit/scripts/new-int.sh <name>` (add `--parent INT-NNN` for a child)
+
+See `.syskit/AGENTS.md` §File Numbering and §Cross-References for shared rules.
+
+## Specification Completeness
+
+When writing the Details section of an interface, cover the items relevant to its type:
+
+**Hardware interfaces:**
+- Signal definitions
+- Timing requirements
+- Electrical characteristics
+
+**Data formats:**
+- Field definitions
+- Encoding
+- Constraints and valid ranges
+
+**APIs:**
+- Endpoints / functions
+- Parameters
+- Return values
+- Error conditions
 
 ## Table of Contents
 
@@ -6526,36 +6288,48 @@ info "Creating .syskit/templates/doc/design/README.md"
 cat > ".syskit/templates/doc/design/README.md" << '__SYSKIT_TEMPLATE_END__'
 # Design
 
-*Software Design Description (SDD) for <system name>*
+*Software Design Description (SDD)*
 
-This directory contains the design specification — the authoritative record of **how** the system accomplishes its requirements.
-
-## System Overview
-
-<Brief description of the system: what it is, what it does, and its operational context.>
-
-## Document Description
-
-<Brief overview of what this document covers and how it is organized.>
-
-## Purpose
-
-Each design unit document describes a cohesive piece of the system: its purpose, the requirements it satisfies, the interfaces it provides and consumes, and its internal behavior. Design units map directly to implementation — each links to source files and test files, enabling full traceability from requirement through design to code.
-
-A design unit might be a hardware module, a source file, a library, or a logical grouping of related code.
+Each design unit describes a cohesive piece of the system: its purpose, the requirements it satisfies, the interfaces it provides and consumes, and its internal behavior. Design units link to source files and test files, enabling full traceability.
 
 ## Conventions
 
-- **Naming:** `unit_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
-- **Child units:** `unit_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `unit_002.01_pid_controller.md`)
-- **Create new:** `.syskit/scripts/new-unit.sh <name>` or `.syskit/scripts/new-unit.sh --parent UNIT-NNN <name>`
-- **Cross-references:** Use `UNIT-NNN` or `UNIT-NNN.NN` identifiers (derived from filename)
-- **Traceability:** Source files link back via `Spec-ref` comments; use `impl-stamp.sh` to keep hashes current
+- **Naming:** `unit_NNN_<name>.md` (children use dot notation: `unit_NNN.NN_<name>.md`)
+- **Create new:** `.syskit/scripts/new-unit.sh <name>` (add `--parent UNIT-NNN` for a child)
+- **Traceability:** Source files link back via `Spec-ref` comments; run `.syskit/scripts/impl-stamp.sh UNIT-NNN` to keep hashes current.
+
+See `.syskit/AGENTS.md` §File Numbering and §Cross-References for shared rules.
 
 ## Framework Documents
 
 - **concept_of_execution.md** — System runtime behavior, startup, data flow, and event handling
-- **design_decisions.md** — Architecture Decision Records (ADR format)
+- **design_decisions.md** — Broadly-affecting design choices (framework selection, architectural patterns, major trade-offs). See ADR Format below.
+
+## ADR Format
+
+When adding a new decision to `design_decisions.md`, use this skeleton:
+
+````markdown
+## DD-NNN: <Title>
+
+**Status:** Proposed | Accepted | Superseded by DD-XXX
+
+### Context
+
+<What is the issue or question that needs a decision?>
+
+### Decision
+
+<What is the decision that was made?>
+
+### Rationale
+
+<Why was this decision made? What alternatives were considered?>
+
+### Consequences
+
+<What are the implications of this decision?>
+````
 
 ## Table of Contents
 
@@ -6610,11 +6384,7 @@ Or copy this template and modify.
 
 ## Verification Method
 
-Choose one:
-- **Test:** Verified by executing a test procedure
-- **Analysis:** Verified by technical evaluation
-- **Inspection:** Verified by examination
-- **Demonstration:** Verified by operation
+Test | Analysis | Inspection | Demonstration
 
 ## Verifies Requirements
 
@@ -6630,28 +6400,19 @@ List all design units exercised by this verification.
 
 ## Preconditions
 
-<What must be true before this verification can be executed>
-
-- System state, configuration, or environment required
-- Dependencies on other verifications completing first
-- Required test data or fixtures
+<Only list setup specific to this verification (pre-loaded fixtures, unusual configuration, dependencies on other verifications). Do not restate the shared Verilator/toolchain preconditions — see `test_strategy.md`.>
 
 ## Procedure
 
-<Step-by-step verification procedure>
+<Step-by-step verification procedure. End each step with an explicit `**Pass:** …` clause stating the observable outcome that means the step passed. A separate "Fail Criteria" list is not required — anything that violates a Pass clause is a fail.>
 
-1. <Step 1>
-2. <Step 2>
-3. ...
+1. **<Short step title>.**
+   <What the step does.>
+   **Pass:** <observable outcome that means this step is satisfied.>
+
+2. ...
 
 For automated tests, describe what the test does at a level useful for understanding intent, not line-by-line code walkthrough.
-
-## Expected Results
-
-<What constitutes a pass>
-
-- **Pass Criteria:** <observable outcome that means the requirement is satisfied>
-- **Fail Criteria:** <observable outcome that means the requirement is NOT satisfied>
 
 ## Test Implementation
 
@@ -6663,7 +6424,7 @@ See `.syskit/ref/ver-ref.md` for the Ver-ref format and workflow.
 
 ## Notes
 
-<Additional context, edge cases, known limitations of this verification>
+<Optional. Edge cases, known limitations, or context that does not belong in the Procedure.>
 __SYSKIT_TEMPLATE_END__
 
 # --- .syskit/templates/doc/verification/test_strategy.md ---
@@ -6745,23 +6506,9 @@ info "Creating .syskit/templates/doc/verification/README.md"
 cat > ".syskit/templates/doc/verification/README.md" << '__SYSKIT_TEMPLATE_END__'
 # Verification
 
-*Software Verification Description (SVD) for <system name>*
+*Software Verification Description (SVD)*
 
-This directory contains the verification specifications — the authoritative record of **how** the system's requirements are verified.
-
-## System Overview
-
-<Brief description of the system: what it is, what it does, and its operational context.>
-
-## Document Description
-
-<Brief overview of what this document covers and how it is organized.>
-
-## Purpose
-
-Each verification document describes a test or analysis procedure that demonstrates a requirement is satisfied. Verification documents link back to requirements (`REQ-NNN`) and design units (`UNIT-NNN`), completing the traceability chain from requirement through design to test.
-
-Verification methods:
+Each verification document describes a test or analysis procedure that demonstrates a requirement is satisfied. Methods:
 
 - **Test** — Verified by executing a test procedure with defined pass/fail criteria
 - **Analysis** — Verified by technical evaluation (calculation, simulation, modeling)
@@ -6770,11 +6517,11 @@ Verification methods:
 
 ## Conventions
 
-- **Naming:** `ver_NNN_<name>.md` — 3-digit zero-padded number, lowercase, underscores
-- **Child verifications:** `ver_NNN.NN_<name>.md` — dot-notation encodes parent (e.g., `ver_003.01_edge_cases.md`)
-- **Create new:** `.syskit/scripts/new-ver.sh <name>` or `.syskit/scripts/new-ver.sh --parent VER-NNN <name>`
-- **Cross-references:** Use `VER-NNN` or `VER-NNN.NN` identifiers (derived from filename)
-- **Traceability:** Each verification document references the requirements it verifies
+- **Naming:** `ver_NNN_<name>.md` (children use dot notation: `ver_NNN.NN_<name>.md`)
+- **Create new:** `.syskit/scripts/new-ver.sh <name>` (add `--parent VER-NNN` for a child)
+- **Traceability:** Test files link back via `Ver-ref` comments; run `.syskit/scripts/ver-stamp.sh VER-NNN` to keep hashes current.
+
+See `.syskit/AGENTS.md` §File Numbering and §Cross-References for shared rules.
 
 ## Framework Documents
 
@@ -6785,6 +6532,35 @@ Verification methods:
 <!-- TOC-START -->
 *Run `.syskit/scripts/toc-update.sh` to generate.*
 <!-- TOC-END -->
+__SYSKIT_TEMPLATE_END__
+
+# --- .syskit/templates/doc/README.md ---
+info "Creating .syskit/templates/doc/README.md"
+cat > ".syskit/templates/doc/README.md" << '__SYSKIT_TEMPLATE_END__'
+# System Documentation
+
+*Software documentation set for <system name>*
+
+## System Overview
+
+<Brief description of the system: what it is, what it does, and its operational context.>
+
+## Document Description
+
+<Brief overview of what this document set covers and how it is organized.>
+
+## Document Set
+
+- [**requirements/**](requirements/README.md) — WHAT the system must do. Condition/response statements (`REQ-NNN`).
+- [**interfaces/**](interfaces/README.md) — Contracts between components and with external systems (`INT-NNN`).
+- [**design/**](design/README.md) — HOW the system works. Design units linked to requirements, interfaces, and source (`UNIT-NNN`).
+- [**verification/**](verification/README.md) — HOW requirements are verified (`VER-NNN`).
+
+Supporting documents at the project root:
+
+- `ARCHITECTURE.md` — Auto-generated architecture overview with block diagram.
+
+For AI-assistant conventions, document style rules, and workflow commands, see `.syskit/AGENTS.md`.
 __SYSKIT_TEMPLATE_END__
 
 # Copy-templates: always overwrite
@@ -6800,6 +6576,7 @@ for tmpl in \
     "doc/requirements/states_and_modes.md" \
     "doc/design/concept_of_execution.md" \
     "doc/design/design_decisions.md" \
+    "doc/README.md" \
     "doc/requirements/README.md" \
     "doc/interfaces/README.md" \
     "doc/design/README.md" \

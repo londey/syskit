@@ -87,59 +87,23 @@ if [ -f "$FILEPATH" ]; then
     exit 1
 fi
 
-cat > "$FILEPATH" << EOF
-# $ID: $(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
+TEMPLATE="$PROJECT_ROOT/.syskit/templates/doc/design/unit_000_template.md"
 
-## Purpose
+if [ ! -f "$TEMPLATE" ]; then
+    echo "Error: template not found at $TEMPLATE" >&2
+    echo "Re-run the syskit installer to create it." >&2
+    exit 1
+fi
 
-<What this unit does and why it exists>
+TITLE=$(echo "$NAME" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
 
-## Implements Requirements
-
-- REQ-NNN (<requirement name>)
-
-## Interfaces
-
-### Provides
-
-- INT-NNN (<interface name>)
-
-### Consumes
-
-- INT-NNN (<interface name>)
-
-### Internal Interfaces
-
-- Connects to UNIT-NNN via <description>
-
-## Design Description
-
-<How this unit works>
-
-### Inputs
-
-<Input signals, parameters, or data>
-
-### Outputs
-
-<Output signals, parameters, or data>
-
-### Internal State
-
-<Any internal state maintained>
-
-### Algorithm / Behavior
-
-<Description of the unit's behavior>
-
-## Implementation
-
-- \`<filepath>\`: <description>
-
-## Design Notes
-
-<Additional design considerations, tradeoffs, alternatives considered>
-EOF
+{
+    printf '# %s: %s\n' "$ID" "$TITLE"
+    awk '
+        past_sep { print; next }
+        /^---[[:space:]]*$/ { past_sep = 1 }
+    ' "$TEMPLATE"
+} > "$FILEPATH"
 
 echo "Created: $FILEPATH"
 echo "ID: $ID"

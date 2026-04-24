@@ -32,17 +32,9 @@ The following documents may need modification based on the feedback:
    - Ensure all cross-references (REQ-NNN, INT-NNN, UNIT-NNN, VER-NNN) remain consistent
    - For verification documents, ensure "Verifies Requirements" and "Verified Design Units" sections reflect the current requirements and design units. Update the Procedure and Expected Results sections if the verified behavior changed.
    - For requirement documents, ensure every requirement uses the condition/response pattern: "When [condition], the system SHALL [observable behavior]."
-   - **Document style rules** (critical):
-     - Write what the system *is now*, not how it changed. No changelog-style language ("previously", "was changed to", "updated from"). The git diff is the changelog.
-     - Do not add version numbers, revision history, or "Version:" fields to internal documents. Git is the version control.
-     - Keep rationale sections brief — explain *why*, don't re-describe the system. Reference other docs by ID (REQ-NNN, INT-NNN, UNIT-NNN) instead of duplicating their content.
-     - After editing, re-read the document — it should stand alone as the definitive reference.
+   - **Document style** (critical): Write what the system *is now* — no changelog language, no version numbers. See `.syskit/ref/document-formats.md` for full style rules.
 
-7. While editing, validate each requirement you modify or create:
-   - **Format:** Must use condition/response pattern. If it lacks a trigger condition, add one.
-   - **Appropriate Level:** If it specifies data layout, register fields, byte encoding, packet structure, or wire protocol details, flag this — that detail belongs in an interface document.
-   - **Singular:** If it addresses multiple capabilities, split it into separate requirements.
-   - **Verifiable:** The condition must define a clear test setup and the behavior a clear pass criterion.
+7. While editing, validate each requirement against `.syskit/ref/requirement-format.md` §Quality Criteria. In particular: condition/response pattern, singular scope, no data-layout details (move those to INT), verifiable trigger/outcome.
 
 8. If the feedback implies changes to documents NOT in your affected files list (e.g., the user's feedback about one document creates a consistency issue with another), note this in the cross-impact section of your summary but do NOT modify documents outside your list.
 
